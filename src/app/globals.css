@@ -3,7 +3,7 @@
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-primary: #2563eb;
+  --color-primary: #16a34a;
   --color-primary-foreground: #ffffff;
   --color-secondary: #f1f5f9;
   --color-secondary-foreground: #0f172a;
@@ -17,6 +17,10 @@
   --radius-lg: 0.5rem;
   --radius-md: calc(0.5rem - 2px);
   --radius-sm: calc(0.5rem - 4px);
+  
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
 }
 
 @layer base {
@@ -29,6 +33,25 @@
     border-color: var(--color-border);
   }
   
+  /* VOUCHER PAID STAMP */
+  .vdoc-paid-stamp {
+    position: absolute; 
+    top: 50%; 
+    left: 50%; 
+    transform: translate(-50%, -50%) rotate(-25deg);
+    border: 6px solid #16a34a; 
+    color: #16a34a; 
+    font-size: 5rem; 
+    font-weight: 900;
+    letter-spacing: 0.15em; 
+    padding: 10px 40px; 
+    border-radius: 16px; 
+    opacity: 0.15;
+    pointer-events: none; 
+    white-space: nowrap; 
+    z-index: 10;
+  }
+
   body {
     background-color: var(--background);
     color: var(--foreground);

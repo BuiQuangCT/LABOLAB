@@ -1,0 +1,3438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dollar Dental Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script>
+const _SB_URL = 'https://axyfvezumdkzgaqtoyjj.supabase.co/rest/v1';
+const _SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4eWZ2ZXp1bWRremdhcXRveWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2NjExMTcsImV4cCI6MjA5NjIzNzExN30.z-wwm6IaMFhZNNFuRIGsEHh33bOdo0IPhimmMEOpvKo';
+const _SB_HDR = { 'apikey': _SB_KEY, 'Authorization': 'Bearer ' + _SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
+
+// GET all rows from table
+window._fbGet = async function(path) {
+  const table = path.split('/')[0];
+  const orderCol = table === 'payments' ? 'entryId' : 'id';
+  const r = await fetch(_SB_URL + '/' + table + '?order=' + orderCol, { headers: _SB_HDR });
+  if(!r.ok) throw new Error('GET ' + table + ' failed: ' + r.status);
+  const rows = await r.json();
+  if(table === 'entries') {
+    const obj = {};
+    rows.forEach(e => { obj[e.id] = e; });
+    return Object.keys(obj).length ? obj : null;
+  }
+  if(table === 'clinics' || table === 'pricelist') {
+    const obj = {};
+    rows.forEach((r,i) => { obj[table+'_'+i] = r; });
+    return rows.length ? obj : null;
+  }
+  if(table === 'payments') {
+    const obj = {};
+    rows.forEach(r => { obj[r.entryId] = r.paid; });
+    return Object.keys(obj).length ? obj : null;
+  }
+  if(table === 'labinfo') return rows[0] || null;
+  return rows;
+};
+
+// SET (upsert) a single entry
+window._fbSet = async function(path, data) {
+  const parts = path.split('/');
+  const table = parts[0];
+  if(table === 'entries') {
+    const r = await fetch(_SB_URL + '/entries?id=eq.' + encodeURIComponent(String(data.id)), {
+      method: 'DELETE', headers: _SB_HDR
+    });
+    await fetch(_SB_URL + '/entries', {
+      method: 'POST', headers: _SB_HDR, body: JSON.stringify(data)
+    });
+  } else if(table === 'clinics') {
+    await fetch(_SB_URL + '/clinics?id=gte.0', { method: 'DELETE', headers: _SB_HDR });
+    if(data && Object.keys(data).length) {
+      const rows = Object.values(data).map(c => ({ clinic:c.clinic||'', doctor:c.doctor||'', address:c.address||'', phone:c.phone||'', email:c.email||'' }));
+      await fetch(_SB_URL + '/clinics', { method: 'POST', headers: _SB_HDR, body: JSON.stringify(rows) });
+    }
+  } else if(table === 'pricelist') {
+    await fetch(_SB_URL + '/pricelist?id=gte.0', { method: 'DELETE', headers: _SB_HDR });
+    if(data && Object.keys(data).length) {
+      const rows = Object.values(data).map(p => ({ item:p.item||'', unit:p.unit||'', price:p.price||'', category:p.category||'fixed', teeth_group:p.teeth_group||'A' }));
+      await fetch(_SB_URL + '/pricelist', { method: 'POST', headers: _SB_HDR, body: JSON.stringify(rows) });
+    }
+  } else if(table === 'labinfo') {
+    await fetch(_SB_URL + '/labinfo?id=eq.1', { method: 'DELETE', headers: _SB_HDR });
+    await fetch(_SB_URL + '/labinfo', { method: 'POST', headers: _SB_HDR, body: JSON.stringify(Object.assign({id:1}, data)) });
+  } else if(table === 'payments') {
+    const entryId = parts[1];
+    await fetch(_SB_URL + '/payments?entryId=eq.' + encodeURIComponent(entryId), { method: 'DELETE', headers: _SB_HDR });
+    await fetch(_SB_URL + '/payments', { method: 'POST', headers: _SB_HDR, body: JSON.stringify({ entryId: entryId, paid: data }) });
+  }
+};
+
+// DELETE entry
+window._fbRemove = async function(path) {
+  const parts = path.split('/');
+  const table = parts[0];
+  const id = parts[1];
+  if(table === 'entries') {
+    await fetch(_SB_URL + '/entries?id=eq.' + encodeURIComponent(id), { method: 'DELETE', headers: _SB_HDR });
+  } else if(table === 'payments') {
+    await fetch(_SB_URL + '/payments?entryId=eq.' + encodeURIComponent(id), { method: 'DELETE', headers: _SB_HDR });
+  }
+};
+
+// Polling for real-time updates
+window._fbOn = function(path, cb) {
+  const table = path.split('/')[0];
+  // Initial fetch
+  window._fbGet(table).then(function(data){ cb(data); showSyncStatus('ok'); }).catch(function(e){ console.warn('fbOn fetch failed:', e); });
+  // Use Supabase Realtime for instant updates
+  if(table === 'entries' || table === 'payments') {
+    const wsUrl = 'wss://axyfvezumdkzgaqtoyjj.supabase.co/realtime/v1/websocket?apikey=' + _SB_KEY + '&vsn=1.0.0';
+    let ws;
+    function connect() {
+      ws = new WebSocket(wsUrl);
+      ws.onopen = function() {
+        // Subscribe to table changes
+        ws.send(JSON.stringify({
+          topic: 'realtime:public:' + table,
+          event: 'phx_join',
+          payload: { config: { broadcast: { self: true }, presence: { key: '' }, postgres_changes: [{ event: '*', schema: 'public', table: table }] } },
+          ref: '1'
+        }));
+        showSyncStatus('ok');
+        console.log('Realtime connected for', table);
+      };
+      ws.onmessage = function(e) {
+        const msg = JSON.parse(e.data);
+        if(msg.event === 'postgres_changes' || (msg.payload && msg.payload.data)) {
+          // Refetch on any change
+          window._fbGet(table).then(function(data){ cb(data); showSyncStatus('ok'); }).catch(function(){});
+        }
+      };
+      ws.onerror = function() { showSyncStatus('offline'); };
+      ws.onclose = function() {
+        // Reconnect after 3 seconds
+        setTimeout(connect, 3000);
+      };
+    }
+    connect();
+  }
+};
+
+window._fbReady = true;
+
+// Keep Supabase alive - ping every 4 days to prevent 7-day pause
+setInterval(function() {
+  fetch(_SB_URL + '/entries?limit=1', { headers: _SB_HDR }).catch(function(){});
+}, 4 * 24 * 60 * 60 * 1000);
+</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f4f6f9; --surface: #ffffff; --surface2: #f0f4f8; --border: #e2e8f0;
+  --text: #1a2035; --muted: #64748b;
+  --green: #16a34a; --blue: #2563eb; --amber: #d97706; --pink: #db2777;
+  --primary: #1a3324;
+}
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+/* ══ MOBILE ══ */
+.mobile-layout { display: flex; flex-direction: column; min-height: 100vh; }
+.desktop-layout { display: none; }
+.mob-header { background: #1a3324; border-bottom: 1px solid #14532d; padding: 24px 20px 20px; text-align: center; }
+.mob-eyebrow { font-family: 'DM Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; }
+.mob-title { font-family: 'DM Serif Display', serif; font-size: clamp(1.8rem, 6vw, 2.4rem); color: var(--green); letter-spacing: -0.02em; line-height: 1.1; }
+.mob-sub { font-size: 0.72rem; color: var(--muted); margin-top: 6px; font-family: 'DM Mono', monospace; }
+.mob-content { flex: 1; padding: 22px 16px 32px; display: flex; flex-direction: column; gap: 16px; max-width: 480px; width: 100%; margin: 0 auto; }
+.date-strip { display: flex; align-items: center; justify-content: space-between; background: #1a3324; border: 1px solid var(--border); border-radius: 12px; padding: 13px 16px; }
+.ds-label { font-family: 'DM Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.ds-date { font-family: 'DM Mono', monospace; font-size: 0.85rem; color: var(--green); font-weight: 500; }
+.ds-right { text-align: right; }
+.ds-num { font-size: 1.4rem; font-weight: 600; color: var(--green); line-height: 1; }
+.ds-lbl { font-size: 0.62rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+.mob-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.mob-nav-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 15px; padding: 20px 12px 17px; display: flex; flex-direction: column; align-items: center; gap: 11px; cursor: pointer; color: var(--text); transition: transform 0.15s, background 0.15s, border-color 0.15s; position: relative; overflow: hidden; }
+.mob-nav-btn:hover { transform: translateY(-2px); background: #f0fdf4; }
+.mob-nav-btn:active { transform: scale(0.97); }
+.mob-nav-btn.c-green { border-color: #16a34a; } .mob-nav-btn.c-green:hover { border-color: #15803d; }
+.mob-nav-btn.c-blue  { border-color: #2563eb; } .mob-nav-btn.c-blue:hover  { border-color: #1d4ed8; }
+.mob-nav-btn.c-amber { border-color: #d97706; } .mob-nav-btn.c-amber:hover { border-color: #b45309; }
+.mob-nav-btn.c-pink  { border-color: #db2777; } .mob-nav-btn.c-pink:hover  { border-color: #be185d; }
+.mob-btn-icon { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.mob-btn-name { font-size: 0.86rem; font-weight: 600; display: block; margin-bottom: 3px; }
+.mob-btn-desc { font-size: 0.66rem; color: var(--muted); font-family: 'DM Mono', monospace; display: block; }
+.mob-arr { position: absolute; top: 9px; right: 11px; opacity: 0.2; transition: opacity 0.2s; }
+.mob-nav-btn:hover .mob-arr { opacity: 0.5; }
+.mob-section-title { font-size: 0.65rem; font-family: 'DM Mono', monospace; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+.recent-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; display: flex; align-items: center; gap: 11px; margin-bottom: 7px; }
+.recent-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--green); }
+.recent-info { flex: 1; min-width: 0; }
+.recent-name { font-size: 0.86rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recent-meta { font-size: 0.7rem; color: var(--muted); margin-top: 2px; font-family: 'DM Mono', monospace; }
+.recent-date { font-size: 0.68rem; color: var(--muted); font-family: 'DM Mono', monospace; flex-shrink: 0; }
+.empty-recent { text-align: center; padding: 22px; color: var(--muted); font-size: 0.8rem; font-family: 'DM Mono', monospace; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.mob-page { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 200; overflow-y: auto; animation: slideUp 0.22s cubic-bezier(0.22,1,0.36,1); }
+.mob-page.active { display: block; }
+@keyframes slideUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.mob-page-header { background: #1a3324; border-bottom: 1px solid var(--border); padding: 15px 16px; display: flex; align-items: center; gap: 11px; position: sticky; top: 0; z-index: 10; }
+.back-btn { color: #a3d9b8 !important; border-color: #3d7a52 !important; background: transparent !important; }
+.back-btn-x { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 13px; color: var(--muted); font-size: 0.8rem; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: color 0.15s, background 0.15s; }
+.back-btn:hover { color: var(--text); background: var(--surface2); }
+.page-title { font-family: 'DM Serif Display', serif; font-size: 1.1rem; color: #7ecf9a; }
+.tooth-btn.tooth-disabled { opacity: 0.2; cursor: not-allowed; pointer-events: none; filter: grayscale(1); }
+
+/* Report Menu Buttons */
+.report-menu-btn { background: #ffffff;
+  display: flex; align-items: center; gap: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px 16px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; text-align: left; width: 100%;
+}
+.report-menu-btn:hover { background: #1e2a3a; border-color: var(--green); }
+.rmb-icon { font-size: 1.8rem; }
+.rmb-text { flex: 1; }
+.rmb-title { color: #1a2035; font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+.rmb-desc { color: #64748b; font-size: 0.78rem; color: var(--muted); }
+.rmb-arrow { font-size: 1.4rem; color: var(--green); font-weight: 300; }
+.desk-rmb { width: 200px; flex-direction: column; align-items: flex-start; gap: 10px; padding: 20px; }
+.desk-rmb .rmb-arrow { display: none; }
+
+/* Voucher Paid */
+.vli-paid-badge { background:#166534; color:#4ade80; font-size:0.65rem; font-weight:700; padding:2px 8px; border-radius:10px; margin-left:6px; letter-spacing:0.05em; vertical-align:middle; }
+.vli-paid-item { border-color:#166534 !important; opacity:0.85; }
+.vli-paid-btn { border:none; border-radius:8px; padding:6px 14px; font-size:0.75rem; font-weight:600; cursor:pointer; background:#166534; color:#4ade80; letter-spacing:0.04em; }
+.vli-paid-btn:hover { background:#14532d; }
+.vli-paid-btn.unpaid-btn { background:#450a0a; color:#f87171; }
+.vli-paid-btn.unpaid-btn:hover { background:#3b0808; }
+.vdoc-paid-stamp {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-25deg);
+  border:6px solid #16a34a; color:#16a34a; font-size:3rem; font-weight:900;
+  letter-spacing:0.15em; padding:10px 30px; border-radius:8px; opacity:0.18;
+  pointer-events:none; white-space:nowrap; z-index:10;
+}
+.voucher-doc { position:relative; }
+.vdoc-paid-btn { border:none; border-radius:10px; padding:10px 28px; font-size:0.88rem; font-weight:700; cursor:pointer; background:#166534; color:#4ade80; letter-spacing:0.05em; }
+.vdoc-paid-btn:hover { background:#14532d; }
+.vdoc-paid-btn.unpaid { background:#450a0a; color:#f87171; }
+.vdoc-paid-btn.unpaid:hover { background:#3b0808; }
+/* Daily Record locked rows */
+.rec-row-locked td { background:rgba(22,101,52,0.06) !important; color:var(--muted); font-size:0.82rem; padding:7px 10px; }
+.rec-paid-lock { font-size:0.72rem; color:#4ade80; font-weight:600; white-space:nowrap; }
+
+.ldg-filter-bar { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; align-items:center; }
+.ldg-date-range { display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:5px 10px; }
+.ldg-date-label { font-size:0.72rem; color:var(--muted); white-space:nowrap; }
+.ldg-date-inp { background:transparent; border:none; color:var(--text); font-size:0.78rem; cursor:pointer; outline:none; width:120px; }
+.ldg-date-inp::-webkit-calendar-picker-indicator { filter:invert(0.6); cursor:pointer; }
+.ldg-sel { background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:6px 10px; font-size:0.78rem; cursor:pointer; min-width:100px; }
+.ldg-sel:focus { outline:none; border-color:var(--green); }
+.ldg-reset { background:transparent; border:1px solid #555; color:var(--muted); border-radius:7px; padding:6px 12px; font-size:0.78rem; cursor:pointer; }
+.ldg-reset:hover { border-color:var(--green); color:var(--green); }
+.ldg-summary { display:flex; gap:18px; flex-wrap:wrap; margin-bottom:12px; font-size:0.83rem; color:var(--muted); padding:10px 14px; background:var(--surface); border-radius:8px; border:1px solid var(--border); }
+.ldg-badge { border:none; border-radius:12px; padding:3px 12px; font-size:0.72rem; font-weight:600; cursor:pointer; letter-spacing:0.04em; }
+.ldg-badge.paid { background:#166534; color:#4ade80; }
+.ldg-badge.paid:hover { background:#14532d; }
+.ldg-badge.unpaid { background:#450a0a; color:#f87171; }
+.ldg-badge.unpaid:hover { background:#3b0808; }
+
+.rpt-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.rpt-table th { background: #1a3324; color: #ffffff; padding: 8px 10px; text-align: left; font-weight: 600; }
+.rpt-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--text); }
+.rpt-table tr:last-child td { border-bottom: none; }
+.rpt-table tr:hover td { background: #f0fdf4; }
+.rpt-total-row td { font-weight: 700; color: var(--green); border-top: 2px solid var(--border); }
+.rpt-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.rpt-nav button { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 0.85rem; }
+.rpt-nav button:hover { border-color: var(--green); }
+.rpt-nav .rpt-label { font-size: 0.95rem; font-weight: 600; color: var(--text); min-width: 120px; text-align: center; }
+
+/* ══ SHARED TABLE ══ */
+.tbl-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 22px; }
+.tbl-hdr { background: #f0fdf4; border-bottom: 1px solid #bbf7d0; padding: 11px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.tbl-hdr-title { font-size: 0.65rem; color: #1a2035; font-family: 'DM Mono', monospace; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; }
+.add-row-btn { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #ffffff; background: #16a34a; border: 1px solid #15803d; border-radius: 6px; padding: 5px 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; white-space: nowrap; }
+.add-row-btn:hover { background: #15803d; }
+.mob-page-header .add-row-btn { background: #ffffff; color: #16a34a; border-color: #16a34a; }
+.mob-page-header .add-row-btn:hover { background: #f0fdf4; }
+.tbl-hdr .add-row-btn { background: #16a34a; color: #ffffff; border-color: #15803d; }
+.tbl-hdr .add-row-btn:hover { background: #15803d; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.data-table th { text-align: left; padding: 9px 12px; font-size: 0.6rem; font-family: 'DM Mono', monospace; letter-spacing: 0.08em; color: #ffffff; background: #1a3324; text-transform: uppercase; border-bottom: 1px solid #14532d; font-weight: 700; white-space: nowrap; }
+.data-table td { padding: 0; border-bottom: 1px solid #e2e8f0; vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: #dcfce7; }
+.cell-input { width: 100%; padding: 9px 12px; background: transparent; border: none; color: var(--text); font-size: 0.82rem; font-family: 'DM Sans', sans-serif; outline: none; transition: background 0.15s; }
+.cell-input:focus { background: #f0fdf4; color: #16a34a; }
+.cell-select { width: 100%; padding: 9px 12px; background: transparent; border: none; color: var(--text); font-size: 0.82rem; font-family: 'DM Sans', sans-serif; outline: none; cursor: pointer; appearance: none; }
+.cell-select:focus { background: #1e2a3a; color: var(--blue); }
+.cell-no { width: 40px; text-align: center; font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--muted); padding: 9px 6px; }
+.del-cell { width: 36px; text-align: center; }
+.del-btn { background: none; border: none; cursor: pointer; color: #c0392b; opacity: 0.4; font-size: 1rem; padding: 6px; transition: opacity 0.15s; line-height: 1; }
+.del-btn:hover { opacity: 1; }
+.tbl-empty { text-align: center; padding: 28px; color: var(--muted); font-size: 0.78rem; font-family: 'DM Mono', monospace; }
+.mob-clinics-content { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.mob-tbl-wrap { overflow-x: auto; }
+
+/* ══ MONTH NAV ══ */
+.month-nav { display: flex; align-items: center; gap: 10px; }
+.month-nav-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); padding: 4px 10px; cursor: pointer; font-size: 0.9rem; transition: color 0.15s; line-height: 1.4; }
+.month-nav-btn:hover { color: var(--text); }
+.month-label { font-family: 'DM Mono', monospace; font-size: 0.78rem; color: var(--green); font-weight: 500; min-width: 100px; text-align: center; }
+
+/* ══ FORM STYLES ══ */
+.form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.form-card-hdr { background: #1a3324; border-bottom: 1px solid #14532d; padding: 11px 18px; font-size: 0.65rem; color: #a3d9b8; font-family: 'DM Mono', monospace; letter-spacing: 0.1em; text-transform: uppercase; }
+.form-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.form-row.full { grid-template-columns: 1fr; }
+.field-wrap { display: flex; flex-direction: column; gap: 5px; }
+.field-lbl { font-size: 0.62rem; font-family: 'DM Mono', monospace; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.field-lbl .req { color: #e05; }
+.f-input, .f-select { padding: 9px 12px; background: #f8f9fb; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.86rem; font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.15s; width: 100%; }
+.f-input:focus, .f-select:focus { border-color: var(--green); }
+.f-select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-color: #f8f9fb; padding-right: 32px; }
+.f-textarea { padding: 9px 12px; background: #f8f9fb; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.86rem; font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.15s; width: 100%; resize: vertical; min-height: 70px; }
+.f-textarea:focus { border-color: var(--green); }
+
+/* Teeth selector */
+.teeth-wrap { background: #f8f9fb; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.teeth-display { background: #ffffff; border: 1px solid #e2e8f0; font-family: 'DM Mono', monospace; font-size: 0.8rem; color: var(--blue); min-height: 28px; padding: 5px 8px; background: var(--surface2); border-radius: 5px; margin-bottom: 10px; word-break: break-all; }
+.teeth-display.empty { color: var(--muted); font-style: italic; }
+.teeth-diagram { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.teeth-row-wrap { display: flex; align-items: center; gap: 6px; }
+.teeth-side-lbl { font-size: 0.6rem; color: var(--muted); font-family: 'DM Mono', monospace; width: 14px; text-align: center; }
+.teeth-row { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
+.tooth-btn { width: 26px; height: 26px; border-radius: 5px; border: 1px solid #2e3a4e; background: var(--surface2); color: var(--muted); font-size: 0.55rem; font-family: 'DM Mono', monospace; cursor: pointer; transition: all 0.1s; display: flex; align-items: center; justify-content: center; }
+.tooth-btn:hover { border-color: var(--green); color: var(--green); }
+.tooth-btn.sel { background: var(--green); color: #f4f6f9; border-color: var(--green); font-weight: 600; }
+.teeth-divider { font-size: 0.6rem; color: #333; margin: 2px 0; font-family: 'DM Mono', monospace; }
+.teeth-manual-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.teeth-manual-row input { flex: 1; padding: 7px 10px; background: #ffffff; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.8rem; font-family: 'DM Mono', monospace; outline: none; }
+.teeth-manual-row input:focus { border-color: var(--green); }
+.teeth-clear-btn { font-size: 0.72rem; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 5px; padding: 5px 10px; cursor: pointer; font-family: 'DM Sans', sans-serif; white-space: nowrap; }
+.teeth-clear-btn:hover { color: var(--text); }
+
+/* Submit btn */
+.submit-btn { width: 100%; padding: 12px; background: #16a34a; border: 1px solid #15803d; border-radius: 9px; color: #ffffff; font-size: 0.95rem; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; margin-top: 4px; }
+.submit-btn:hover { background: #15803d; }
+
+/* ══ DESKTOP ══ */
+@media (min-width: 900px) {
+  .mobile-layout { display: none; }
+  .desktop-layout { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 220px; min-width: 220px; background: #1a3324; border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100vh; position: fixed; left: 0; top: 0; transition: width 0.2s ease; overflow: hidden; }
+  .sidebar.collapsed { width: 54px; min-width: 54px; }
+  .sidebar.collapsed .sidebar-eyebrow,
+  .sidebar.collapsed .sidebar-title,
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .sidebar-footer-text { display: none; }
+  .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
+  .sidebar.collapsed .sidebar-logo { padding: 14px 10px; justify-content: center; }
+  .sidebar.collapsed .sidebar-bottom { padding: 10px; align-items: center; }
+  .sidebar-logo { padding: 22px 20px 20px; border-bottom: 1px solid #2e5c3e; flex-shrink: 0; }
+  .sidebar-eyebrow { font-family: 'DM Mono', monospace; font-size: 0.58rem; letter-spacing: 0.18em; color: #7ecf9a; text-transform: uppercase; margin-bottom: 6px; }
+  .sidebar-title { font-family: 'DM Serif Display', serif; font-size: 1.2rem; color: #ffffff; line-height: 1.25; }
+  .sidebar-nav { padding: 12px 10px; display: flex; flex-direction: column; gap: 3px; flex: 1; overflow-y: auto; min-height: 0; }
+  .sidebar-bottom { padding: 10px 10px 14px; border-top: 1px solid #2e5c3e; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+  /* desk-content margin handled by desk-main */
+  .desk-content.expanded { margin-left: 54px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; border: none; background: transparent; color: #a3d9b8; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; width: 100%; text-align: left; transition: background 0.15s, color 0.15s; }
+  .nav-item:hover { background: #2e5c3e; color: #ffffff; }
+  .nav-item.active { background: #2e5c3e; color: #7ecf9a; }
+  .sidebar-minimize-btn { background: none; border: none; color: #a3d9b8; cursor: pointer; padding: 8px; border-radius: 6px; display: flex; align-items: center; gap: 8px; width: 100%; font-size: 0.78rem; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+  .sidebar-minimize-btn:hover { background: #2e5c3e; color: #fff; }
+  .sidebar-logout-btn { background: none; border: none; color: #f87171; cursor: pointer; padding: 8px; border-radius: 6px; display: flex; align-items: center; gap: 8px; width: 100%; font-size: 0.78rem; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+  .sidebar-logout-btn:hover { background: #3d1515; color: #fca5a5; }
+  .desk-main { flex: 1; margin-left: 220px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; transition: margin-left 0.2s ease; }
+  .desk-topbar { background: #1a3324; border-bottom: 1px solid var(--border); padding: 14px 26px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .desk-topbar-title { font-size: 1rem; font-weight: 500; color: #ffffff; }
+  .desk-topbar-date { font-size: 0.7rem; color: #a3d9b8; font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .desk-stats-bar { display: flex; gap: 8px; }
+  .desk-stat-pill { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; text-align: center; }
+  .desk-stat-pill .num { font-size: 1.15rem; font-weight: 600; line-height: 1; }
+  .desk-stat-pill .lbl { font-size: 0.6rem; font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .desk-content { flex: 1; overflow-y: auto; padding: 22px 26px 30px 8px; }
+  .desk-tab { display: none; }
+  .desk-tab.active { display: block; }
+  .sec-label { font-size: 0.63rem; font-family: 'DM Mono', monospace; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 11px; }
+  .lab-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 18px; }
+  .lab-card-hdr { background: #1a3324; border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .lab-card-hdr span { font-size: 0.62rem; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: 0.1em; text-transform: uppercase; }
+  .edit-btn { font-size: 0.7rem; color: var(--green); background: #1a3324; border: none; border-radius: 5px; padding: 4px 10px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+  .edit-btn:hover { background: #2e5c3e; }
+  .lab-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+  .lab-field { padding: 13px 16px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .lab-field:nth-child(3n) { border-right: none; }
+  .lab-field.full { grid-column: 1/-1; border-right: none; border-bottom: none; }
+  .f-lbl { font-size: 0.6rem; color: #555; font-family: 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 5px; }
+  .f-val { font-size: 0.86rem; color: var(--text); }
+  .f-val.accent { color: var(--blue); }
+  .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 11px; margin-bottom: 18px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .stat-card .lbl { font-size: 0.6rem; color: #555; font-family: 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+  .stat-card .num { font-size: 1.5rem; font-weight: 600; line-height: 1; }
+  .recent-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .recent-hdr { background: #1a3324; border-bottom: 1px solid var(--border); padding: 10px 16px; font-size: 0.62rem; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: 0.1em; text-transform: uppercase; }
+  .rtable { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .rtable th { text-align: left; padding: 9px 13px; font-size: 0.6rem; font-family: 'DM Mono', monospace; letter-spacing: 0.08em; color: #555; text-transform: uppercase; border-bottom: 1px solid var(--border); font-weight: 400; }
+  .rtable td { padding: 10px 13px; border-bottom: 1px solid #1e2130; color: var(--text); }
+  .rtable tr:last-child td { border-bottom: none; }
+  .rtable tr:hover td { background: #dcfce7; }
+  .cbadge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.68rem; font-family: 'DM Mono', monospace; background: #16a34a; color: #ffffff; }
+  .desk-empty { text-align: center; padding: 36px; color: var(--muted); font-size: 0.8rem; font-family: 'DM Mono', monospace; }
+  .desk-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; gap: 14px; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.82rem; text-align: center; }
+  .desk-placeholder .icon { font-size: 2.8rem; opacity: 0.3; }
+  .desk-placeholder .ptitle { font-size: 1rem; color: var(--text); font-family: 'DM Serif Display', serif; }
+
+  /* Desktop daily layout: form left, table right below */
+  /* daily-layout removed - now uses full-width table with modal */
+  .form-row { grid-template-columns: 1fr 1fr; }
+}
+
+/* ══ MODALS ══ */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 9999; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: #ffffff; border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: 100%; max-width: 440px; margin: 20px; max-height: 90vh; overflow-y: auto; }
+.modal-title { font-family: 'DM Serif Display', serif; font-size: 1.1rem; color: var(--green); margin-bottom: 18px; }
+.modal-field { margin-bottom: 13px; }
+.modal-field label { display: block; font-size: 0.65rem; font-family: 'DM Mono', monospace; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; margin-bottom: 5px; }
+.modal-field input { width: 100%; padding: 9px 12px; background: #ffffff; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.86rem; font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.15s; }
+.modal-field input:focus { border-color: var(--green); }
+.modal-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+.modal-save { flex: 1; padding: 10px; background: #16a34a; border: 1px solid #15803d; border-radius: 8px; color: #ffffff; font-size: 0.88rem; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+.modal-save:hover { background: #15803d; }
+.modal-cancel { padding: 10px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 0.88rem; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+.modal-cancel:hover { color: var(--text); }
+
+/* Toast */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(60px); background: #1a3324; border: 1px solid #2e5c3e; color: var(--green); padding: 10px 22px; border-radius: 8px; font-size: 0.82rem; font-family: 'DM Mono', monospace; z-index: 999; transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1); white-space: nowrap; pointer-events: none; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 899px) {
+  .form-row { grid-template-columns: 1fr; }
+  .form-row.two { grid-template-columns: 1fr 1fr; }
+}
+
+/* ══ VOUCHER LIST ══ */
+.voucher-list-item { background: #ffffff; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.voucher-list-item:hover { border-color: var(--green); background: var(--surface2); }
+.vli-left .vli-doctor { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+.vli-left .vli-clinic { font-size: 0.75rem; color: var(--muted); margin-top: 3px; font-family: 'DM Mono', monospace; }
+.vli-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.vli-cases { font-size: 0.72rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+.vli-total { font-size: 0.9rem; font-weight: 600; color: var(--amber); font-family: 'DM Mono', monospace; }
+.voucher-empty { text-align: center; padding: 40px; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 0.82rem; }
+
+/* ══ VOUCHER DOCUMENT ══ */
+.voucher-doc { background: white; color: #1a1a1a; border-radius: 10px; padding: 28px; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; }
+.voucher-doc-hdr { display: grid; grid-template-columns: 160px 1fr; gap: 20px; margin-bottom: 20px; align-items: start; }
+.vdoc-logo-area { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.vdoc-logo-circle { width: 100px; height: 100px; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.vdoc-lab-name { font-size: 0.85rem; font-weight: 700; color: #1a1a1a; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; }
+.vdoc-lab-sub { font-size: 0.6rem; color: #666; letter-spacing: 0.12em; text-transform: uppercase; text-align: center; }
+.vdoc-addr { font-size: 0.8rem; color: #333; line-height: 1.8; }
+.vdoc-bill-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 18px; }
+.vdoc-bill-to .label { font-weight: 700; font-size: 0.88rem; margin-bottom: 4px; }
+.vdoc-bill-to .doctor-name { font-size: 1rem; color: #1a3a6e; font-weight: 700; }
+.vdoc-bill-to .clinic-name { font-size: 0.82rem; color: #555; margin-top: 2px; }
+.vdoc-invoice-info table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.vdoc-invoice-info td { padding: 3px 6px; }
+.vdoc-invoice-info td:first-child { text-align: right; font-weight: 600; color: #555; }
+.vdoc-invoice-info td:last-child { font-weight: 600; }
+.vdoc-items { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 0.8rem; }
+.vdoc-items th { background: #1a3a6e; color: white; padding: 8px 10px; text-align: left; font-size: 0.72rem; font-weight: 600; }
+.vdoc-items th:nth-child(3),.vdoc-items td:nth-child(3),.vdoc-items th:nth-child(4),.vdoc-items td:nth-child(4) { text-align: center; }
+.vdoc-items th:nth-child(5),.vdoc-items td:nth-child(5),.vdoc-items th:nth-child(6),.vdoc-items td:nth-child(6) { text-align: right; }
+.vdoc-items th:nth-child(7),.vdoc-items td:nth-child(7) { text-align: left; font-size: 0.75rem; color: #555; min-width: 80px; }
+.vdoc-items td { padding: 7px 10px; border-bottom: 1px solid #e8e8e8; }
+.vdoc-items tr:nth-child(even) td { background: #f8f9ff; }
+.vdoc-totals { display: flex; justify-content: flex-end; margin-bottom: 18px; }
+.vdoc-totals table { font-size: 0.85rem; border-collapse: collapse; min-width: 220px; }
+.vdoc-totals td { padding: 5px 10px; }
+.vdoc-totals td:first-child { color: #555; }
+.vdoc-totals td:last-child { text-align: right; font-weight: 600; }
+.vdoc-total-row td { font-weight: 700; font-size: 1rem; background: #fff9e0; border-top: 2px solid #f5c76e; border-bottom: 2px solid #f5c76e; }
+.vdoc-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; border-top: 1px solid #e0e0e0; padding-top: 14px; font-size: 0.8rem; }
+.vdoc-payment h4,.vdoc-comments h4 { font-size: 0.85rem; font-weight: 700; margin-bottom: 8px; }
+.vdoc-payment table { border-collapse: collapse; font-size: 0.76rem; }
+.vdoc-payment td { padding: 2px 6px 2px 0; color: #333; }
+.vdoc-payment td:first-child { color: #777; min-width: 70px; }
+.vdoc-pay-section { font-weight: 600; color: #1a3a6e; margin-top: 8px; display: block; font-size: 0.78rem; }
+.vdoc-thankyou { margin-top: 8px; font-style: italic; color: #555; font-size: 0.76rem; }
+.discount-input { width: 90px; padding: 3px 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.82rem; text-align: right; }
+
+/* ══ PRINT ══ */
+#print-area { display: none; }
+@media print {
+  body > *:not(#print-area) { display: none !important; }
+  #print-area { display: block !important; }
+  .no-print, .vdoc-paid-action { display: none !important; }
+  .voucher-doc { background: white !important; box-shadow: none !important; border: none !important; max-width: 100% !important; margin: 0 !important; padding: 10px !important; }
+  .vdoc-header { display: flex !important; justify-content: space-between !important; }
+  .vdoc-bill-row { display: flex !important; justify-content: space-between !important; }
+  .vdoc-bottom { display: flex !important; justify-content: space-between !important; }
+  .vdoc-items { width: 100% !important; border-collapse: collapse !important; }
+  .vdoc-items th { background: #1a3324 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { margin: 1cm; size: A4; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══ PASSWORD LOCK SCREEN ══ -->
+<div id="lock-screen" style="display:none;position:fixed;inset:0;background:#1a3324;z-index:99999;flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+<div style="width:100%;max-width:340px;">
+  <div style="text-align:center;margin-bottom:32px;">
+    <div style="font-size:2.5rem;margin-bottom:8px;">🦷</div>
+    <div style="font-family:'DM Serif Display',serif;font-size:1.6rem;color:#7ecf9a;">Dollar Dental Lab</div>
+    <div style="font-size:0.8rem;color:#aaa;margin-top:4px;">Enter your password to continue</div>
+  </div>
+  <div style="position:relative;margin-bottom:14px;">
+    <input id="lock-input" type="password" placeholder="Password"
+      style="width:100%;box-sizing:border-box;background:#2e5c3e;border:1px solid #3d7a52;border-radius:10px;padding:14px 48px 14px 16px;color:#fff;font-size:1rem;outline:none;font-family:'DM Sans',sans-serif;"
+      onkeydown="if(event.key==='Enter')checkPassword()"/>
+    <button onclick="toggleLockPw()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#aaa;cursor:pointer;font-size:1.1rem;">👁</button>
+  </div>
+  <div id="lock-error" style="color:#f87171;font-size:0.8rem;text-align:center;min-height:18px;margin-bottom:10px;"></div>
+  <button onclick="checkPassword()"
+    style="width:100%;padding:14px;background:#16a34a;border:1px solid #15803d;border-radius:10px;color:#ffffff;font-size:1rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">
+    Unlock
+  </button>
+  <div style="text-align:center;margin-top:16px;font-size:0.72rem;color:#555;">
+    Admin or Technician password accepted
+  </div>
+  <div style="text-align:center;margin-top:12px;">
+    <button onclick="showChangePassword()" style="background:none;border:none;color:#3d7a52;font-size:0.72rem;cursor:pointer;text-decoration:underline;">Change Password</button>
+  </div>
+</div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="change-pw-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100000;align-items:center;justify-content:center;">
+  <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:24px;width:90%;max-width:320px;">
+    <div style="font-family:'DM Serif Display',serif;color:#16a34a;font-size:1.1rem;margin-bottom:16px;">Change Password</div>
+    <div style="font-size:0.75rem;color:#64748b;margin-bottom:12px;">Select which password to change:</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button id="cp-role-admin" onclick="setCpRole('admin')" style="flex:1;padding:8px;border-radius:8px;border:2px solid #16a34a;background:#e8f5ee;color:#16a34a;font-weight:700;cursor:pointer;font-size:0.8rem;">👑 Admin</button>
+      <button id="cp-role-tech" onclick="setCpRole('tech')" style="flex:1;padding:8px;border-radius:8px;border:2px solid #e2e8f0;background:#f8f9fb;color:#64748b;cursor:pointer;font-size:0.8rem;">🔧 Technician</button>
+    </div>
+    <input id="cp-current" type="password" placeholder="Current password"
+      style="width:100%;box-sizing:border-box;background:#f8f9fb;border:1px solid #e2e8f0;border-radius:8px;padding:11px 14px;color:#1a2035;font-size:0.9rem;outline:none;margin-bottom:10px;font-family:'DM Sans',sans-serif;"/>
+    <input id="cp-new" type="password" placeholder="New password"
+      style="width:100%;box-sizing:border-box;background:#f8f9fb;border:1px solid #e2e8f0;border-radius:8px;padding:11px 14px;color:#1a2035;font-size:0.9rem;outline:none;margin-bottom:10px;font-family:'DM Sans',sans-serif;"/>
+    <input id="cp-confirm" type="password" placeholder="Confirm new password"
+      style="width:100%;box-sizing:border-box;background:#f8f9fb;border:1px solid #e2e8f0;border-radius:8px;padding:11px 14px;color:#1a2035;font-size:0.9rem;outline:none;margin-bottom:10px;font-family:'DM Sans',sans-serif;"/>
+    <div id="cp-error" style="color:#f87171;font-size:0.78rem;min-height:18px;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="closeChangePw()" style="flex:1;padding:10px;background:#f0f2f5;border:1px solid #e2e8f0;border-radius:8px;color:#64748b;cursor:pointer;">Cancel</button>
+      <button onclick="doChangePassword()" style="flex:1;padding:10px;background:#16a34a;border:1px solid #15803d;border-radius:8px;color:#ffffff;font-weight:700;cursor:pointer;">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MOBILE ══ -->
+<div class="mobile-layout">
+  <div class="mob-header">
+    <div class="mob-eyebrow">Lab Management System</div>
+    <div class="mob-title">Dollar Dental Lab</div>
+    <div class="mob-sub">Select a section to get started</div>
+  </div>
+  <div class="mob-content">
+    <div class="date-strip">
+      <div><div class="ds-label">Today</div><div class="ds-date" id="mob-date">—</div></div>
+      <div class="ds-right"><div class="ds-num" id="mob-count">0</div><div class="ds-lbl">cases today</div></div>
+    </div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 16px 6px;">
+  <span id="sync-status" style="font-size:0.7rem;font-family:DM Mono,monospace;"></span>
+  <button onclick="logoutApp()" style="font-size:0.72rem;padding:4px 12px;background:none;border:1px solid #f87171;border-radius:8px;color:#f87171;cursor:pointer;">⇐ Log Out</button>
+</div>
+    <div class="mob-grid">
+      <button class="mob-nav-btn c-green" onclick="mobOpen('mob-daily')">
+        <svg class="mob-arr" width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2v6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="mob-btn-icon" style="background:#1a3324;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7ecf9a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
+        <div><span class="mob-btn-name">Daily Record</span><span class="mob-btn-desc">Enter cases</span></div>
+      </button>
+      <button class="mob-nav-btn c-blue" onclick="mobOpen('mob-clinics')">
+        <svg class="mob-arr" width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2v6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="mob-btn-icon" style="background:#0e2040;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7eb3f5" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16"/><path d="M3 21h18"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></div>
+        <div><span class="mob-btn-name">Clinics & Price</span><span class="mob-btn-desc">Manage clinics</span></div>
+      </button>
+      <button class="mob-nav-btn c-amber" onclick="mobOpen('mob-voucher')">
+        <svg class="mob-arr" width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2v6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="mob-btn-icon" style="background:#2e1e06;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f5c76e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="11" x2="12" y2="15"/><line x1="10" y1="13" x2="14" y2="13"/></svg></div>
+        <div><span class="mob-btn-name">Voucher</span><span class="mob-btn-desc">Create vouchers</span></div>
+      </button>
+      <button class="mob-nav-btn c-pink" onclick="mobOpen('mob-reports')">
+        <svg class="mob-arr" width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 10L10 2M10 2H4M10 2v6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="mob-btn-icon" style="background:#2e0e20;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f57eb3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+        <div><span class="mob-btn-name">Reports</span><span class="mob-btn-desc">View summaries</span></div>
+      </button>
+    </div>
+    <div>
+      <div class="mob-section-title">Recent Entries</div>
+      <div id="mob-recent"></div>
+    </div>
+  </div>
+
+  <!-- Mobile: Daily Record — shows monthly records by default -->
+  <div class="mob-page" id="mob-daily">
+    <div class="mob-page-header">
+      <button class="back-btn" onclick="mobClose('mob-daily')">← Back</button>
+      <div class="page-title">Daily Record</div>
+      <button class="add-row-btn" style="margin-left:auto;" onclick="openMobForm()">+ Add Record</button>
+    </div>
+    <div style="padding:16px;">
+      <div class="tbl-section">
+        <div class="tbl-hdr">
+          <span class="tbl-hdr-title">Monthly Records</span>
+          <div class="month-nav">
+            <button class="month-nav-btn" onclick="changeMonth(-1,'m')">‹</button>
+            <span class="month-label" id="m-month-label">—</span>
+            <button class="month-nav-btn" onclick="changeMonth(1,'m')">›</button>
+          </div>
+        </div>
+        <div class="mob-tbl-wrap">
+          <table class="data-table"><thead><tr><th>Date</th><th>Clinic</th><th>Doctor</th><th>Case</th><th>Teeth</th><th>Qty</th><th style="width:70px;"></th></tr></thead><tbody id="m-record-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Mobile: Add Record Form Popup -->
+<div class="mob-page" id="mob-add-form">
+  <div class="mob-page-header">
+    <button class="back-btn" onclick="closeMobForm()">← Back</button>
+    <div class="page-title">Add Record</div>
+  </div>
+  <div style="padding:16px;display:flex;flex-direction:column;gap:16px;">
+    <div class="form-card">
+      <div class="form-card-hdr">New Entry</div>
+      <div class="form-body">
+        <!-- Date only -->
+        <div class="field-wrap"><label class="field-lbl" for="m-date">Date <span class="req">*</span></label><input type="date" class="f-input" id="m-date"/></div>
+        <!-- Fixed / Removable -->
+        <div class="field-wrap">
+          <div class="field-lbl">Category <span class="req">*</span></div>
+          <div style="display:flex;gap:6px;">
+            <button type="button" id="m-cat-fixed" onclick="setCat('m','fixed')" style="flex:1;padding:8px;border:2px solid #16a34a;border-radius:6px;background:#e8f5ee;color:#16a34a;font-size:0.82rem;cursor:pointer;font-weight:600;">🔩 Fixed</button>
+            <button type="button" id="m-cat-removable" onclick="setCat('m','removable')" style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:6px;background:#f8f9fb;color:#64748b;font-size:0.82rem;cursor:pointer;">🦷 Removable</button>
+          </div>
+        </div>
+        <!-- Clinic -->
+        <div class="field-wrap">
+          <label class="field-lbl" for="m-clinic">Clinic Name <span class="req">*</span></label>
+          <select class="f-select" id="m-clinic" onchange="onClinicChange('m')"><option value="">— Select Clinic —</option></select>
+        </div>
+        <!-- Doctor -->
+        <div class="field-wrap">
+          <label class="field-lbl" for="m-doctor">Doctor Name <span class="req">*</span></label>
+          <select class="f-select" id="m-doctor"><option value="">— Select Doctor —</option></select>
+        </div>
+        <!-- Dynamic case rows -->
+        <div class="field-wrap">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span class="field-lbl" style="margin:0;">Case Type <span class="req">*</span> &amp; Patient</span>
+            <button type="button" onclick="addCaseRow('m')" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:1rem;cursor:pointer;line-height:1;">+</button>
+          </div>
+          <div id="m-case-rows"></div>
+        </div>
+        <!-- Remark -->
+        <div class="field-wrap"><label class="field-lbl" for="m-remark">Remark</label><textarea class="f-textarea" id="m-remark" placeholder="Any notes..."></textarea></div>
+        <button class="submit-btn" onclick="submitEntry('m')">+ Add to Record</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- Mobile: Clinics -->
+  <div class="mob-page" id="mob-clinics">
+    <div class="mob-page-header"><button class="back-btn" onclick="mobClose('mob-clinics')">← Back</button><div class="page-title">Clinics & Price List</div></div>
+    <div class="mob-clinics-content">
+      <div class="tbl-section">
+        <div class="tbl-hdr"><span class="tbl-hdr-title">Clinic List</span><button class="add-row-btn" onclick="openClinicModal()">+ Add Clinic</button></div>
+        <div class="mob-tbl-wrap"><table class="data-table" id="mob-clinic-table"><thead><tr><th>No</th><th>Clinic Name</th><th>Doctor</th><th>Phone</th><th>Email</th><th></th></tr></thead><tbody id="mob-clinic-body"></tbody></table></div>
+      </div>
+      <div class="tbl-section">
+        <div class="tbl-hdr"><span class="tbl-hdr-title">Price List</span><button class="add-row-btn" onclick="openPriceModal()">+ Add Item</button></div>
+        <div class="mob-tbl-wrap"><table class="data-table" id="mob-price-table"><thead><tr><th>No</th><th>Item</th><th>Unit</th><th>Price (MMK)</th><th></th></tr></thead><tbody id="mob-price-body"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mob-page" id="mob-voucher">
+    <div class="mob-page-header">
+      <button class="back-btn" onclick="mobClose('mob-voucher')">← Back</button>
+      <div class="page-title">Voucher</div>
+    </div>
+    <div style="padding:16px;">
+      <div class="tbl-hdr" style="background:transparent;border:none;padding:0 0 12px 0;">
+        <div class="month-nav">
+          <button class="month-nav-btn" onclick="changeVoucherMonth(-1)">‹</button>
+          <span class="month-label" id="mob-voucher-month">—</span>
+          <button class="month-nav-btn" onclick="changeVoucherMonth(1)">›</button>
+        </div>
+      </div>
+      <div id="mob-voucher-list"></div>
+    </div>
+  </div>
+
+  <!-- Mobile: Voucher Full View -->
+  <div class="mob-page" id="mob-voucher-view">
+    <div class="mob-page-header">
+      <button class="back-btn" onclick="mobClose('mob-voucher-view')">← Back</button>
+      <div class="page-title">Voucher</div>
+      <button class="add-row-btn" style="margin-left:auto;" onclick="printVoucher()">🖨 Print</button>
+    </div>
+    <div id="mob-voucher-content" style="padding:16px;"></div>
+  </div>
+  <div class="mob-page" id="mob-reports">
+    <div class="mob-page-header"><button class="back-btn" onclick="mobClose('mob-reports')">← Back</button><div class="page-title">Reports</div></div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+      <button class="report-menu-btn" onclick="openMobReport('ledger')">
+        <span class="rmb-icon">📒</span>
+        <div class="rmb-text"><div class="rmb-title">Ledger</div><div class="rmb-desc">All entries with totals</div></div>
+        <span class="rmb-arrow">›</span>
+      </button>
+      <button class="report-menu-btn" onclick="openMobReport('monthly')">
+        <span class="rmb-icon">📅</span>
+        <div class="rmb-text"><div class="rmb-title">Monthly Report</div><div class="rmb-desc">Summary by month</div></div>
+        <span class="rmb-arrow">›</span>
+      </button>
+      <button class="report-menu-btn" onclick="openMobReport('yearly')">
+        <span class="rmb-icon">📆</span>
+        <div class="rmb-text"><div class="rmb-title">Yearly Report</div><div class="rmb-desc">Summary by year</div></div>
+        <span class="rmb-arrow">›</span>
+      </button>
+      <button class="report-menu-btn" onclick="openMobReport('percent')">
+        <span class="rmb-icon">📊</span>
+        <div class="rmb-text"><div class="rmb-title">Percentage Calculation</div><div class="rmb-desc">Income split by month</div></div>
+        <span class="rmb-arrow">›</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mob Ledger Sub-page -->
+  <div class="mob-page" id="mob-report-ledger">
+    <div class="mob-page-header"><button class="back-btn" onclick="closeMobReport('ledger')">← Reports</button><div class="page-title">Ledger</div></div>
+    <div id="mob-ledger-content" style="padding:16px;"></div>
+  </div>
+
+  <!-- Mob Monthly Report Sub-page -->
+  <div class="mob-page" id="mob-report-monthly">
+    <div class="mob-page-header"><button class="back-btn" onclick="closeMobReport('monthly')">← Reports</button><div class="page-title">Monthly Report</div></div>
+    <div id="mob-monthly-content" style="padding:16px;"></div>
+  </div>
+
+  <!-- Mob Yearly Report Sub-page -->
+  <div class="mob-page" id="mob-report-yearly">
+    <div class="mob-page-header"><button class="back-btn" onclick="closeMobReport('yearly')">← Reports</button><div class="page-title">Yearly Report</div></div>
+    <div id="mob-yearly-content" style="padding:16px;"></div>
+  </div>
+
+  <!-- Mob Percentage Calculation Sub-page -->
+  <div class="mob-page" id="mob-report-percent">
+    <div class="mob-page-header"><button class="back-btn" onclick="closeMobReport('percent')">← Reports</button><div class="page-title">Percentage Calculation</div></div>
+    <div id="mob-percent-content" style="padding:16px;"></div>
+  </div>
+</div>
+
+<!-- ══ DESKTOP ══ -->
+<div class="desktop-layout">
+  <div class="sidebar" id="desk-sidebar">
+    <div class="sidebar-logo"><div class="sidebar-eyebrow">Dental Lab System</div><div class="sidebar-title">Dollar<br>Dental Lab</div></div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="deskTab('home',this)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="nav-label">Home</span></button>
+      <button class="nav-item" onclick="deskTab('daily',this)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg><span class="nav-label">Daily Record</span></button>
+      <button class="nav-item" onclick="deskTab('clinics',this)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16"/><path d="M3 21h18"/><path d="M9 8h6M9 12h6"/></svg><span class="nav-label">Clinics & Price</span></button>
+      <button class="nav-item" onclick="deskTab('voucher',this)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="11" x2="12" y2="15"/><line x1="10" y1="13" x2="14" y2="13"/></svg><span class="nav-label">Voucher</span></button>
+      <button class="nav-item" onclick="deskTab('reports',this)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="nav-label">Reports</span></button>
+    </nav>
+    <div style="border-top:1px solid #2e5c3e;padding:10px;">
+      <button onclick="logoutApp()" style="display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;color:#f87171;cursor:pointer;padding:10px 12px;border-radius:8px;font-size:0.85rem;font-family:sans-serif;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Log Out
+      </button>
+    </div>
+  </div>
+
+  <div class="desk-main" id="desk-main">
+    <div class="desk-topbar">
+      <div><div class="desk-topbar-title" id="desk-page-title">Home</div><div class="desk-topbar-date" id="desk-date">—</div></div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button id="tech-logout-btn" onclick="logoutApp()" style="display:none;align-items:center;gap:6px;background:none;border:1px solid #f87171;color:#f87171;cursor:pointer;padding:6px 12px;border-radius:8px;font-size:0.78rem;font-family:sans-serif;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Log Out
+        </button>
+        <div class="desk-stats-bar">
+          <div class="desk-stat-pill"><div class="num" style="color:var(--green);" id="desk-today-num">0</div><div class="lbl" style="color:var(--muted);">today</div></div>
+          <div class="desk-stat-pill"><div class="num" style="color:var(--blue);" id="desk-month-num">0</div><div class="lbl" style="color:var(--muted);">this month</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Home Tab -->
+    <div class="desk-content desk-tab active" id="tab-home">
+      <div class="sec-label">Lab Information</div>
+      <div class="lab-card">
+        <div class="lab-card-hdr"><span>Lab Details</span><button class="edit-btn" onclick="openLabModal()">✎ Edit Info</button></div>
+        <div class="lab-grid">
+          <div class="lab-field"><div class="f-lbl">Lab Name</div><div class="f-val" id="inf-name">Dollar Dental Lab</div></div>
+          <div class="lab-field"><div class="f-lbl">Phone</div><div class="f-val" id="inf-phone">—</div></div>
+          <div class="lab-field"><div class="f-lbl">Working Hours</div><div class="f-val" id="inf-hours">—</div></div>
+          <div class="lab-field"><div class="f-lbl">Email</div><div class="f-val accent" id="inf-email">—</div></div>
+          <div class="lab-field"><div class="f-lbl">Address</div><div class="f-val" id="inf-address">—</div></div>
+          <div class="lab-field"><div class="f-lbl">Notes</div><div class="f-val" id="inf-notes">—</div></div>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="lbl">Cases Today</div><div class="num" style="color:var(--green);" id="st-today">0</div></div>
+        <div class="stat-card"><div class="lbl">This Month</div><div class="num" style="color:var(--blue);" id="st-month">0</div></div>
+        <div class="stat-card"><div class="lbl">Total Clinics</div><div class="num" style="color:var(--amber);" id="st-clinics">0</div></div>
+      </div>
+      <div class="sec-label">Recent Entries</div>
+      <div class="recent-wrap"><div class="recent-hdr">Latest Cases</div><div id="desk-recent"></div></div>
+    </div>
+
+    <!-- Daily Record Tab -->
+    <div class="desk-content desk-tab" id="tab-daily">
+      <!-- Full width table with Add Record button -->
+      <div class="tbl-section">
+        <div class="tbl-hdr">
+          <span class="tbl-hdr-title">Monthly Records</span>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="month-nav">
+              <button class="month-nav-btn" onclick="changeMonth(-1,'d')">‹</button>
+              <span class="month-label" id="d-month-label">—</span>
+              <button class="month-nav-btn" onclick="changeMonth(1,'d')">›</button>
+            </div>
+            <button onclick="openDeskEntryModal()" style="background:#16a34a;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-size:0.85rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;">+ Add Record</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead><tr>
+              <th style="width:40px;">No</th>
+              <th style="width:100px;">Date</th>
+              <th style="width:120px;">Clinic</th>
+              <th style="width:110px;">Doctor</th>
+              <th style="width:100px;">Patient</th>
+              <th style="min-width:160px;">Case</th>
+              <th style="width:70px;">Shade</th>
+              <th style="width:100px;">Teeth No.</th>
+              <th style="width:50px;">Qty</th>
+              <th>Remark</th>
+              <th style="width:30px;"></th>
+            </tr></thead>
+            <tbody id="d-record-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Desktop Entry Modal -->
+    <div class="modal-overlay" id="desk-entry-modal" style="z-index:9998;">
+      <div style="background:#fff;border-radius:14px;width:580px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <div class="form-card-hdr" style="border-radius:14px 14px 0 0;">New Entry</div>
+        <div class="form-body">
+          <!-- Row 1: Date only -->
+          <div class="field-wrap"><label class="field-lbl" for="d-date">Date <span class="req">*</span></label><input type="date" class="f-input" id="d-date"/></div>
+          <!-- Row 2: Fixed / Removable toggle -->
+          <div class="field-wrap">
+            <div class="field-lbl">Category <span class="req">*</span></div>
+            <div style="display:flex;gap:6px;">
+              <button type="button" id="d-cat-fixed" onclick="setCat('d','fixed')" style="flex:1;padding:8px;border:2px solid #16a34a;border-radius:6px;background:#e8f5ee;color:#16a34a;font-size:0.82rem;cursor:pointer;font-weight:600;">🔩 Fixed</button>
+              <button type="button" id="d-cat-removable" onclick="setCat('d','removable')" style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:6px;background:#f8f9fb;color:#64748b;font-size:0.82rem;cursor:pointer;">🦷 Removable</button>
+            </div>
+          </div>
+          <!-- Row 3: Clinic + Doctor -->
+          <div class="form-row">
+            <div class="field-wrap"><label class="field-lbl" for="d-clinic">Clinic Name <span class="req">*</span></label><select class="f-select" id="d-clinic" onchange="onClinicChange('d')"><option value="">— Select Clinic —</option></select></div>
+            <div class="field-wrap"><label class="field-lbl" for="d-doctor">Doctor Name <span class="req">*</span></label><select class="f-select" id="d-doctor"><option value="">— Select Doctor —</option></select></div>
+          </div>
+          <!-- Dynamic case rows -->
+          <div class="field-wrap">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <span class="field-lbl" style="margin:0;">Case Type <span class="req">*</span> &amp; Patient Name</span>
+              <button type="button" onclick="addCaseRow('d')" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:1rem;cursor:pointer;line-height:1;">+</button>
+            </div>
+            <div id="d-case-rows"></div>
+          </div>
+          <!-- Remark -->
+          <div class="field-wrap"><label class="field-lbl" for="d-remark">Remark</label><textarea class="f-textarea" id="d-remark" placeholder="Any notes..."></textarea></div>
+          <!-- Buttons -->
+          <div style="display:flex;gap:10px;">
+            <button class="modal-cancel" onclick="closeDeskEntryModal()" style="flex:1;">Cancel</button>
+            <button class="submit-btn" onclick="submitEntry('d')" style="flex:2;">+ Add to Record</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Clinics Tab -->
+    <div class="desk-content desk-tab" id="tab-clinics">
+      <div class="tbl-section">
+        <div class="tbl-hdr"><span class="tbl-hdr-title">Clinic List</span><button class="add-row-btn" onclick="openClinicModal()">+ Add Clinic</button></div>
+        <table class="data-table" id="desk-clinic-table">
+          <thead><tr><th style="width:44px;">No</th><th>Name of Clinic</th><th>Doctor Name</th><th>Address</th><th>Phone No.</th><th>Email</th><th style="width:36px;"></th></tr></thead>
+          <tbody id="desk-clinic-body"></tbody>
+        </table>
+      </div>
+      <div class="tbl-section">
+        <div class="tbl-hdr"><span class="tbl-hdr-title">Price List</span><button class="add-row-btn" onclick="openPriceModal()">+ Add Item</button></div>
+          <table class="data-table" id="desk-price-table">
+          <tbody id="desk-price-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Voucher Tab -->
+    <div class="desk-content desk-tab" id="tab-voucher">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+        <div class="sec-label" style="margin-bottom:0;">Vouchers</div>
+        <div class="month-nav">
+          <button class="month-nav-btn" onclick="changeVoucherMonth(-1)">‹</button>
+          <span class="month-label" id="desk-voucher-month">—</span>
+          <button class="month-nav-btn" onclick="changeVoucherMonth(1)">›</button>
+        </div>
+      </div>
+      <div id="desk-voucher-list"></div>
+    </div>
+    <!-- Reports Tab -->
+    <div class="desk-content desk-tab" id="tab-reports">
+      <div id="desk-report-menu" style="padding:24px;">
+        <div class="desk-section-title" style="margin-bottom:18px;">Reports</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <button class="report-menu-btn desk-rmb" onclick="openDeskReport('ledger')">
+            <span class="rmb-icon">📒</span>
+            <div class="rmb-text"><div class="rmb-title">Ledger</div><div class="rmb-desc">All entries with totals</div></div>
+          </button>
+          <button class="report-menu-btn desk-rmb" onclick="openDeskReport('monthly')">
+            <span class="rmb-icon">📅</span>
+            <div class="rmb-text"><div class="rmb-title">Monthly Report</div><div class="rmb-desc">Summary by month</div></div>
+          </button>
+          <button class="report-menu-btn desk-rmb" onclick="openDeskReport('yearly')">
+            <span class="rmb-icon">📆</span>
+            <div class="rmb-text"><div class="rmb-title">Yearly Report</div><div class="rmb-desc">Summary by year</div></div>
+          </button>
+          <button class="report-menu-btn desk-rmb" onclick="openDeskReport('percent')">
+            <span class="rmb-icon">📊</span>
+            <div class="rmb-text"><div class="rmb-title">Percentage Calculation</div><div class="rmb-desc">Income split by month</div></div>
+          </button>
+        </div>
+      </div>
+      <!-- Desktop Report Views -->
+      <div id="desk-report-view" style="display:none;padding:24px;">
+        <div style="margin-bottom:16px;">
+          <button class="back-btn" onclick="closeDeskReport()">← Reports</button>
+          <span id="desk-report-view-title" style="font-size:1.1rem;font-weight:600;color:var(--text);margin-left:12px;"></span>
+        </div>
+        <div id="desk-report-view-content"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="clinic-modal">
+  <div class="modal">
+    <div class="modal-title">Add New Clinic</div>
+    <div class="modal-field"><label>Name of Clinic *</label><input type="text" id="c-clinic" placeholder="e.g. Smile Dental Clinic"/></div>
+    <div class="modal-field"><label>Doctor Name</label><input type="text" id="c-doctor" placeholder="e.g. Dr. Mongmor"/></div>
+    <div class="modal-field"><label>Address</label><input type="text" id="c-address" placeholder="e.g. No.5, Main Street"/></div>
+    <div class="modal-field"><label>Phone No.</label><input type="text" id="c-phone" placeholder="e.g. 09 xxx xxx xxx"/></div>
+    <div class="modal-field"><label>Email</label><input type="text" id="c-email" placeholder="e.g. clinic@example.com"/></div>
+    <div class="modal-actions"><button class="modal-cancel" onclick="closeClinicModal()">Cancel</button><button class="modal-save" onclick="saveClinic()">Add Clinic</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="price-modal">
+  <div class="modal">
+    <div class="modal-title">Add New Price Item</div>
+    <div class="modal-field"><label>Item / Case Type *</label><input type="text" id="p-item" placeholder="e.g. FCZ Crown"/></div>
+    <div class="modal-field"><label>Category *</label>
+      <select id="p-category" class="f-select">
+        <option value="fixed">🔩 Fixed</option>
+        <option value="removable">🦷 Removable</option>
+      </select>
+    </div>
+    <div class="modal-field"><label>Teeth Group *</label>
+      <select id="p-teeth-group" class="f-select">
+        <option value="A">A — Needs Teeth No.</option>
+        <option value="B">B — Upper / Lower only</option>
+        <option value="C">C — No teeth needed</option>
+      </select>
+    </div>
+    <div class="modal-grid2">
+      <div class="modal-field"><label>Unit</label><input type="text" id="p-unit" placeholder="e.g. per tooth"/></div>
+      <div class="modal-field"><label>Price (MMK)</label><input type="number" id="p-price" placeholder="e.g. 150000"/></div>
+    </div>
+    <div class="modal-actions"><button class="modal-cancel" onclick="closePriceModal()">Cancel</button><button class="modal-save" onclick="savePrice()">Add Item</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="lab-modal">
+  <div class="modal">
+    <div class="modal-title">Edit Lab Information</div>
+    <div class="modal-field"><label>Lab Name</label><input type="text" id="e-name" placeholder="Dollar Dental Lab"/></div>
+    <div class="modal-field"><label>Phone</label><input type="text" id="e-phone"/></div>
+    <div class="modal-field"><label>Email</label><input type="text" id="e-email"/></div>
+    <div class="modal-field"><label>Working Hours</label><input type="text" id="e-hours"/></div>
+    <div class="modal-field"><label>Address</label><input type="text" id="e-address"/></div>
+    <div class="modal-field"><label>Notes</label><input type="text" id="e-notes"/></div>
+    <div class="modal-actions"><button class="modal-cancel" onclick="closeLabModal()">Cancel</button><button class="modal-save" onclick="saveLabInfo()">Save Changes</button></div>
+  </div>
+</div>
+
+<!-- Edit Entry Modal (mobile records) -->
+<div class="modal-overlay" id="edit-entry-modal" style="display:none;" onclick="if(event.target===this)closeEditEntryModal()">
+  <div class="modal">
+    <div class="modal-title">Edit Record</div>
+    <input type="hidden" id="ee-id"/>
+    <div class="modal-grid2">
+      <div class="modal-field"><label>Date</label><input type="date" id="ee-date"/></div>
+      <div class="modal-field"><label>Quantity</label><input type="number" id="ee-qty" min="1"/></div>
+    </div>
+    <div class="modal-field"><label>Clinic Name</label><input type="text" id="ee-clinic"/></div>
+    <div class="modal-field"><label>Doctor Name</label><input type="text" id="ee-doctor"/></div>
+    <div class="modal-field"><label>Case Type</label><input type="text" id="ee-case"/></div>
+    <div class="modal-grid2">
+      <div class="modal-field"><label>Shade</label><input type="text" id="ee-shade"/></div>
+      <div class="modal-field"><label>Patient Name</label><input type="text" id="ee-patient"/></div>
+    </div>
+    <div class="modal-field"><label>Teeth No.</label><input type="text" id="ee-teeth" placeholder="e.g. 11 12 21"/></div>
+    <div class="modal-field"><label>Remark</label><input type="text" id="ee-remark"/></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeEditEntryModal()">Cancel</button>
+      <button class="modal-save" onclick="saveEditEntry()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Print area -->
+<div id="print-area"></div>
+
+<!-- Desktop: Voucher Full View Modal -->
+<div class="modal-overlay" id="voucher-view-modal" style="align-items:flex-start;padding:30px 20px;overflow-y:auto;">
+  <div style="width:100%;max-width:820px;margin:0 auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <button class="modal-cancel" onclick="closeVoucherView()">← Back to List</button>
+      <button class="add-row-btn" onclick="printVoucher()">🖨 Print / Save PDF</button>
+    </div>
+    <div id="desk-voucher-content"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Confirm Modal -->
+<div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:24px;width:300px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div id="confirm-title" style="font-size:1rem;font-weight:700;color:#1a3324;margin-bottom:8px;"></div>
+    <div id="confirm-msg" style="font-size:0.85rem;color:#64748b;margin-bottom:20px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeConfirm()" style="flex:1;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font-size:0.85rem;">Cancel</button>
+      <button onclick="doConfirm()" style="flex:1;padding:10px;border:none;border-radius:8px;background:#dc2626;color:#fff;cursor:pointer;font-size:0.85rem;font-weight:600;">Delete</button>
+    </div>
+  </div>
+</div>
+<script>
+// ══ DATA ══
+// Use device local date (all devices are in Myanmar timezone UTC+6:30)
+const now = new Date();
+const todayStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+const monthKey = todayStr.slice(0,7);
+let entries   = JSON.parse(localStorage.getItem('dentalEntries')   || '[]');
+let clinics   = JSON.parse(localStorage.getItem('dentalClinics')   || '[]');
+const DEFAULT_PRICE_LIST = [
+  { item: 'Full Contour Zirconia',          unit: 'per unit',  price: '65000',  category: 'fixed',     teeth_group: 'A' },
+  { item: 'Multilayer Zirconia (4D Pro)',    unit: 'per unit',  price: '75000',  category: 'fixed',     teeth_group: 'A' },
+  { item: 'Porcelain Fused to Zirconia',    unit: 'per unit',  price: '85000',  category: 'fixed',     teeth_group: 'A' },
+  { item: 'Zirconia Veneer',                unit: 'per unit',  price: '100000', category: 'fixed',     teeth_group: 'A' },
+  { item: 'Zirconia Post and Core',         unit: 'per unit',  price: '60000',  category: 'fixed',     teeth_group: 'A' },
+  { item: 'PMMA',                           unit: 'per unit',  price: '20000',  category: 'fixed',     teeth_group: 'A' },
+  { item: 'PMMA Multilayer',                unit: 'per unit',  price: '35000',  category: 'fixed',     teeth_group: 'A' },
+  { item: 'Dental Model Half (U or L)',     unit: 'per cast',  price: '8000',   category: 'fixed',     teeth_group: 'B' },
+  { item: 'Dental Model Half (U and L)',    unit: 'per cast',  price: '15000',  category: 'fixed',     teeth_group: 'B' },
+  { item: 'Dental Model One Cast (U or L)', unit: 'per cast',  price: '15000',  category: 'fixed',     teeth_group: 'B' },
+  { item: 'Dental Model Full (U and L)',    unit: 'per cast',  price: '30000',  category: 'fixed',     teeth_group: 'B' },
+  { item: 'Acrylic Denture Base (QC20)',    unit: 'per unit',  price: '12000',  category: 'removable', teeth_group: 'B' },
+  { item: 'Acrylic Teeth',                  unit: 'per unit',  price: '6000',   category: 'removable', teeth_group: 'A' },
+  { item: 'Acrylic Full/Full',              unit: 'per set',   price: '150000', category: 'removable', teeth_group: 'B' },
+  { item: 'Flexible Base + One Unit',       unit: 'per unit',  price: '45000',  category: 'removable', teeth_group: 'A' },
+  { item: 'Flexible Add One Unit',          unit: 'per unit',  price: '6000',   category: 'removable', teeth_group: 'A' },
+  { item: 'Flexible Full/Full',             unit: 'per set',   price: '220000', category: 'removable', teeth_group: 'B' },
+  { item: 'Acrylic Special Tray + Block',   unit: 'per cast',  price: '12000',  category: 'removable', teeth_group: 'B' },
+  { item: 'Rebasing (Heat Cure)',           unit: 'per cast',  price: '30000',  category: 'removable', teeth_group: 'B' },
+  { item: 'Tooth Addition Japan',           unit: 'per tooth', price: '6000',   category: 'removable', teeth_group: 'C' },
+  { item: 'Clasp Addition',                 unit: 'per unit',  price: '10000',  category: 'removable', teeth_group: 'C' },
+  { item: 'Repair',                         unit: 'per case',  price: '10000',  category: 'removable', teeth_group: 'B' },
+  { item: 'Clear Retainer (U+L)',           unit: 'per set',   price: '40000',  category: 'removable', teeth_group: 'B' },
+  { item: 'Bleaching Tray Soft (U+L)',      unit: 'per set',   price: '40000',  category: 'removable', teeth_group: 'B' },
+  { item: 'Reinforced Palatal/Lingual Bar', unit: 'per unit',  price: '15000',  category: 'removable', teeth_group: 'B' },
+];
+let priceList = JSON.parse(localStorage.getItem('dentalPriceList') || '[]');
+// Merge default prices - add any missing items and apply category
+// priceList comes directly from Supabase - no defaults
+localStorage.setItem('dentalPriceList', JSON.stringify(priceList));
+let labInfo   = JSON.parse(localStorage.getItem('dentalLabInfo')   || '{}');
+let selectedTeeth = { d: new Set(), m: new Set() };
+let viewMonth = { d: todayStr.slice(0,7), m: todayStr.slice(0,7) };
+
+// ══ TEETH DATA (FDI notation) ══
+const UPPER_RIGHT = [18,17,16,15,14,13,12,11];
+const UPPER_LEFT  = [21,22,23,24,25,26,27,28];
+const LOWER_RIGHT = [48,47,46,45,44,43,42,41];
+const LOWER_LEFT  = [31,32,33,34,35,36,37,38];
+
+// ══ INIT ══
+const shortDate = now.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+const longDate  = now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+window.addEventListener('DOMContentLoaded', function() {
+  // Always lock on fresh load - hide app content until password entered
+  sessionStorage.removeItem('userRole');
+  localStorage.removeItem("dentalPriceList"); // Force fresh pricelist from Supabase
+  if(window.location.protocol !== 'file:') {
+    document.querySelector('.desktop-layout') && (document.querySelector('.desktop-layout').style.visibility = 'hidden');
+    document.querySelector('.mobile-layout') && (document.querySelector('.mobile-layout').style.visibility = 'hidden');
+  }
+  initLockScreen();
+  document.getElementById('mob-date').textContent  = shortDate;
+  document.getElementById('mob-count').textContent = parseInt(localStorage.getItem('entryCount_'+todayStr)||'0');
+  document.getElementById('desk-date').textContent = longDate;
+  document.getElementById('desk-today-num').textContent = parseInt(localStorage.getItem('entryCount_'+todayStr)||'0');
+  document.getElementById('desk-month-num').textContent = entries.filter(e=>e.date&&e.date.startsWith(monthKey)).length;
+  document.getElementById('st-today').textContent  = parseInt(localStorage.getItem('entryCount_'+todayStr)||'0');
+  document.getElementById('st-month').textContent  = entries.filter(e=>e.date&&e.date.startsWith(monthKey)).length;
+  document.getElementById('st-clinics').textContent = clinics.length;
+
+  var dateFields = ['d-date','m-date'];
+  dateFields.forEach(function(id){ var el=document.getElementById(id); if(el) el.value=todayStr; });
+
+  buildTeethDiagram('d');
+  buildTeethDiagram('m');
+  populateDropdowns('d');
+  populateDropdowns('m');
+  renderMonthLabel('d');
+  renderRecordTable('d');
+  renderClinicTable();
+  renderPriceTable();
+  renderMobRecent();
+  renderDeskRecent();
+  loadLabInfo();
+  initVoucher();
+
+  // Load data from Firebase
+  loadFromCloud();
+
+  var modals = ['clinic-modal','price-modal','lab-modal','voucher-view-modal','desk-entry-modal'];
+  modals.forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
+  });
+  document.getElementById('c-email').addEventListener('keydown',function(e){if(e.key==='Enter')saveClinic();});
+  document.getElementById('p-price').addEventListener('keydown',function(e){if(e.key==='Enter')savePrice();});
+});
+
+// ══ MOBILE NAV ══
+function mobOpen(id) {
+  document.getElementById(id).classList.add('active');
+  document.body.style.overflow='hidden';
+  if(id==='mob-daily'){ renderRecordTable('m'); renderMonthLabel('m'); populateDropdowns('m'); }
+  if(id==='mob-voucher'){ renderVoucherList(); }
+}
+function mobClose(id){ document.getElementById(id).classList.remove('active'); document.body.style.overflow=''; }
+function openMobForm(){
+  populateDropdowns('m');
+  var container = document.getElementById('m-case-rows');
+  if(container){ container.innerHTML=''; addCaseRow('m'); }
+  document.getElementById('mob-add-form').classList.add('active');
+  document.getElementById('m-date').value=todayStr;
+}
+function closeMobForm(){ document.getElementById('mob-add-form').classList.remove('active'); }
+
+// ══ DESKTOP TABS ══
+const tabLabels={home:'Home',daily:'Daily Record',clinics:'Clinics & Price List',voucher:'Voucher',reports:'Reports'};
+function toggleSidebar() {
+  var sidebar = document.getElementById("desk-sidebar");
+  var main = document.getElementById("desk-main");
+  var icon = document.getElementById("minimize-icon");
+  var collapsed = sidebar.classList.toggle("collapsed");
+  main.style.marginLeft = collapsed ? "54px" : "220px";
+  icon.style.transform = collapsed ? "rotate(180deg)" : "";
+  sidebar.querySelectorAll(".nav-label").forEach(function(el){ el.style.display = collapsed ? "none" : ""; });
+}
+
+function logoutApp() {
+  sessionStorage.removeItem('userRole');
+  document.querySelector('.desktop-layout') && (document.querySelector('.desktop-layout').style.visibility = 'hidden');
+  document.querySelector('.mobile-layout') && (document.querySelector('.mobile-layout').style.visibility = 'hidden');
+  const lock = document.getElementById('lock-screen');
+  if(lock) {
+    lock.style.display = 'flex';
+    document.getElementById('lock-input').value = '';
+    document.getElementById('lock-error').textContent = '';
+    setTimeout(function(){ document.getElementById('lock-input').focus(); }, 100);
+  }
+  document.querySelectorAll('.nav-item').forEach(function(el){ el.style.display = ''; });
+  var mobHome = document.getElementById('mob-home');
+  if(mobHome) mobHome.style.display = '';
+  var sidebar = document.getElementById('desk-sidebar');
+  var main    = document.getElementById('desk-main');
+  if(sidebar) sidebar.style.display = '';
+  if(main)    main.style.marginLeft = '220px';
+}
+
+
+// Cases needing teeth numbers input
+var TEETH_CASES = ['Full Contour Zirconia','Multilayer Zirconia (4D Pro)','Porcelain Fused to Zirconia','Zirconia Veneer','Zirconia Post and Core','PMMA','PMMA Multilayer','Acrylic Teeth','Flexible Add One Unit','Flexible Base + One Unit','Upper Denture','Lower Denture','Upper Flexible','Lower Flexible'];
+// Cases needing Upper/Lower only
+var UL_CASES = ['Acrylic Full/Full','Flexible Full/Full','Acrylic Denture Base (QC20)','Rebasing (Heat Cure)','Repair','Acrylic Special Tray + Block','Clear Retainer (U+L)','Bleaching Tray Soft (U+L)','Reinforced Palatal/Lingual Bar','Dental Model Half (U or L)','Dental Model Half (U and L)','Dental Model One Cast (U or L)','Dental Model Full (U and L)'];
+
+// Per-row teeth storage
+var rowTeeth = {};
+var rowTeethCount = 0;
+
+function buildRowTeethDiagram(key, wrap) {
+  rowTeeth[key] = new Set();
+
+  function makeBtn(n) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tooth-btn';
+    btn.textContent = n;
+    btn.setAttribute('data-tooth', n);
+    btn.onclick = function() {
+      if(rowTeeth[key].has(n)) {
+        rowTeeth[key].delete(n);
+        btn.classList.remove('sel');
+      } else {
+        rowTeeth[key].add(n);
+        btn.classList.add('sel');
+      }
+      var sorted = Array.from(rowTeeth[key]).sort(function(a,b){return a-b;});
+      var disp = wrap.querySelector('[data-teeth-disp]');
+      if(disp) { disp.textContent = sorted.length ? sorted.join(' ') : 'No teeth selected'; disp.classList.toggle('empty', !sorted.length); }
+      // Auto-fill qty from teeth count
+      var qtyInp = wrap.querySelector('[data-qty-input]');
+      if(qtyInp) qtyInp.value = sorted.length || 1;
+    };
+    return btn;
+  }
+
+  function makeRow(nums) {
+    var row = document.createElement('div');
+    row.className = 'teeth-row';
+    nums.forEach(function(n){ row.appendChild(makeBtn(n)); });
+    return row;
+  }
+
+  function mkLbl(t,st){ var s=document.createElement('span'); s.className='teeth-side-lbl'; s.textContent=t; if(st) s.style.cssText=st; return s; }
+
+  var disp = document.createElement('div');
+  disp.className = 'teeth-display empty'; disp.setAttribute('data-teeth-disp','');
+  disp.textContent = 'No teeth selected';
+
+  var upper = document.createElement('div'); upper.className='teeth-row-wrap';
+  upper.appendChild(mkLbl('R')); upper.appendChild(makeRow(UPPER_RIGHT));
+  upper.appendChild(mkLbl('|','margin:0 4px;color:#2e3348;')); upper.appendChild(makeRow(UPPER_LEFT));
+
+  var divider = document.createElement('div'); divider.className='teeth-divider'; divider.textContent='── UPPER ──────── LOWER ──';
+
+  var lower = document.createElement('div'); lower.className='teeth-row-wrap';
+  lower.appendChild(mkLbl('R')); lower.appendChild(makeRow(LOWER_RIGHT));
+  lower.appendChild(mkLbl('|','margin:0 4px;color:#2e3348;')); lower.appendChild(makeRow(LOWER_LEFT));
+
+  // Manual input row
+  var manualRow = document.createElement('div');
+  manualRow.style.cssText = 'display:flex;gap:6px;margin-top:4px;';
+  var manualInput = document.createElement('input');
+  manualInput.type = 'text'; manualInput.className = 'f-input';
+  manualInput.placeholder = 'Or type: 11 12 21 22';
+  manualInput.setAttribute('data-teeth-manual','');
+  manualInput.oninput = function() {
+    var nums = this.value.trim().split(/\s+/).filter(Boolean).map(Number).filter(function(n){return n>0;});
+    rowTeeth[key] = new Set(nums);
+    wrap.querySelectorAll('[data-tooth]').forEach(function(b){
+      b.classList.toggle('sel', rowTeeth[key].has(Number(b.getAttribute('data-tooth'))));
+    });
+    var disp = wrap.querySelector('[data-teeth-disp]');
+    if(disp) { disp.textContent = nums.length ? nums.join(' ') : 'No teeth selected'; disp.classList.toggle('empty', !nums.length); }
+    // Auto-fill qty
+    var qtyInp = wrap.querySelector('[data-qty-input]');
+    if(qtyInp) qtyInp.value = nums.length || 1;
+  };
+  var clearBtn = document.createElement('button');
+  clearBtn.type='button'; clearBtn.className='teeth-clear-btn'; clearBtn.textContent='Clear';
+  clearBtn.onclick = function() {
+    rowTeeth[key] = new Set();
+    wrap.querySelectorAll('[data-tooth]').forEach(function(b){ b.classList.remove('sel'); });
+    manualInput.value = '';
+    var disp = wrap.querySelector('[data-teeth-disp]');
+    if(disp) { disp.textContent='No teeth selected'; disp.classList.add('empty'); }
+  };
+  manualRow.appendChild(manualInput); manualRow.appendChild(clearBtn);
+
+  var shadeRow = document.createElement('div');
+  shadeRow.style.cssText = 'display:flex;gap:6px;margin-top:6px;align-items:center;';
+  var shadeLbl = document.createElement('span');
+  shadeLbl.textContent = 'Shade:';
+  shadeLbl.style.cssText = 'font-size:0.72rem;color:#64748b;white-space:nowrap;';
+  var shadeInp = document.createElement('input');
+  shadeInp.type = 'text'; shadeInp.className = 'f-input';
+  shadeInp.placeholder = 'e.g. A3'; shadeInp.style.flex = '1';
+  shadeInp.setAttribute('data-shade-input','');
+  // Auto qty display
+  var qtyLbl = document.createElement('span');
+  qtyLbl.style.cssText = 'font-size:0.72rem;color:#64748b;white-space:nowrap;';
+  qtyLbl.textContent = 'Qty:';
+  var qtyInp = document.createElement('input');
+  qtyInp.type = 'number'; qtyInp.className = 'f-input';
+  qtyInp.style.cssText = 'width:60px;flex:none;';
+  qtyInp.min = '1'; qtyInp.value = '0';
+  qtyInp.setAttribute('data-qty-input','');
+  shadeRow.appendChild(shadeLbl); shadeRow.appendChild(shadeInp);
+  shadeRow.appendChild(qtyLbl); shadeRow.appendChild(qtyInp);
+
+  wrap.appendChild(disp);
+  wrap.appendChild(upper); wrap.appendChild(divider); wrap.appendChild(lower);
+  wrap.appendChild(manualRow);
+  wrap.appendChild(shadeRow);
+  wrap.setAttribute('data-teeth-key', key);
+}
+
+function getCaseGroup(caseType) {
+  // Use teeth_group from pricelist if available
+  var item = priceList.find(function(p){ return p.item === caseType; });
+  if(item && item.teeth_group) return item.teeth_group;
+  // Fallback to hardcoded lists
+  if(TEETH_CASES.indexOf(caseType) !== -1) return 'A';
+  if(UL_CASES.indexOf(caseType) !== -1) return 'B';
+  return 'C';
+}
+
+function updateRowTeeth(row, caseType) {
+  var wrap = row.querySelector('[data-teeth-wrap]');
+  if(!wrap) return;
+  var group = getCaseGroup(caseType);
+  wrap.innerHTML = '';
+  wrap.style.display = 'none';
+  if(group === 'A') {
+    wrap.style.display = 'block';
+    wrap.style.padding = '8px';
+    wrap.style.background = '#f8f9fb';
+    wrap.style.borderRadius = '8px';
+    wrap.style.marginTop = '4px';
+    var key = wrap.getAttribute('data-teeth-key') || ('row-'+ (++rowTeethCount));
+    buildRowTeethDiagram(key, wrap);
+
+    // Disable upper or lower teeth based on case type
+    var upperTeeth = UPPER_RIGHT.concat(UPPER_LEFT);
+    var lowerTeeth = LOWER_RIGHT.concat(LOWER_LEFT);
+    var disableUpper = (caseType === 'Lower Denture' || caseType === 'Lower Flexible');
+    var disableLower = (caseType === 'Upper Denture' || caseType === 'Upper Flexible');
+    if(disableUpper || disableLower) {
+      var toDisable = disableUpper ? upperTeeth : lowerTeeth;
+      toDisable.forEach(function(n) {
+        var btn = wrap.querySelector('[data-tooth="'+n+'"]');
+        if(btn) btn.classList.add('tooth-disabled');
+      });
+    }
+  } else if(group === 'B') {
+    wrap.style.display = 'flex';
+    wrap.style.gap = '6px';
+    wrap.style.marginTop = '4px';
+    wrap.style.alignItems = 'center';
+    wrap.innerHTML = [
+      '<button type="button" onclick="setUL(this,\'Upper\')" data-ul-btn data-ul-val="Upper" style="flex:1;padding:5px;border:2px solid #e2e8f0;border-radius:6px;background:#f8f9fb;color:#64748b;font-size:0.78rem;cursor:pointer;">Upper</button>',
+      '<button type="button" onclick="setUL(this,\'Lower\')" data-ul-btn data-ul-val="Lower" style="flex:1;padding:5px;border:2px solid #e2e8f0;border-radius:6px;background:#f8f9fb;color:#64748b;font-size:0.78rem;cursor:pointer;">Lower</button>',
+      '<input type="hidden" data-ul-select value=""/>',
+      '<span style="font-size:0.72rem;color:#64748b;white-space:nowrap;">Qty:</span>',
+      '<input type="number" class="f-input" style="width:65px;flex:none;" min="1" value="1" data-qty-input/>',
+    ].join('');
+  } else {
+    // Group C — show qty input
+    wrap.style.display = 'flex';
+    wrap.style.gap = '6px';
+    wrap.style.marginTop = '4px';
+    wrap.style.alignItems = 'center';
+    wrap.innerHTML = [
+      '<span style="font-size:0.72rem;color:#64748b;white-space:nowrap;">Qty:</span>',
+      '<input type="number" class="f-input" style="width:80px;flex:none;" min="1" value="1" data-qty-input/>',
+    ].join('');
+  }
+}
+
+function setUL(btn, val) {
+  var wrap = btn.closest('[data-teeth-wrap]');
+  var hidden = wrap.querySelector('[data-ul-select]');
+  var qtyInp = wrap.querySelector('[data-qty-input]');
+  var current = hidden ? hidden.value : '';
+
+  // Toggle selection
+  var selected = current ? current.split(' ') : [];
+  var idx = selected.indexOf(val);
+  if(idx !== -1) {
+    selected.splice(idx, 1); // deselect
+  } else {
+    selected.push(val); // select
+    // Keep order: Upper first, then Lower
+    selected.sort(function(a,b){ return a === 'Upper' ? -1 : 1; });
+  }
+
+  // Update hidden value
+  if(hidden) hidden.value = selected.join(' ');
+  // Update qty
+  if(qtyInp) qtyInp.value = selected.length || 1;
+
+  // Update button styles
+  wrap.querySelectorAll('[data-ul-btn]').forEach(function(b) {
+    var bVal = b.getAttribute('data-ul-val');
+    var isSelected = selected.indexOf(bVal) !== -1;
+    b.style.borderColor = isSelected ? '#16a34a' : '#e2e8f0';
+    b.style.background  = isSelected ? '#e8f5ee' : '#f8f9fb';
+    b.style.color       = isSelected ? '#16a34a' : '#64748b';
+    b.style.fontWeight  = isSelected ? '600' : '400';
+  });
+}
+
+function addCaseRow(pfx) {
+  var container = document.getElementById(pfx+'-case-rows');
+  if(!container) return;
+  var idx = container.children.length + 1;
+  var row = document.createElement('div');
+  row.className = 'case-row';
+  row.style.cssText = 'margin-bottom:10px;border:2px solid #16a34a;border-radius:10px;overflow:hidden;';
+  row.innerHTML = [
+    '<div style="background:#e8f5ee;padding:4px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #bbddd0;">',
+    '<span style="color:#16a34a;font-size:0.72rem;font-family:DM Mono,monospace;letter-spacing:0.08em;font-weight:600;">CASE '+ idx +'</span>',
+    '<button type="button" onclick="removeCaseRow(this)" style="background:none;border:1px solid #f87171;color:#f87171;border-radius:5px;padding:1px 8px;cursor:pointer;font-size:0.9rem;line-height:1.4;">−</button>',
+    '</div>',
+    '<div style="padding:10px;display:flex;flex-direction:column;gap:8px;">',
+    '<div style="display:flex;gap:6px;align-items:center;">',
+    '<select class="f-select" style="flex:1.6;min-width:140px;" data-case-select>',
+    '<option value="">— Select Case —</option>',
+    '</select>',
+    '<input type="text" class="f-input" style="flex:1;min-width:90px;" placeholder="Patient" data-patient-input/>',
+    '</div>',
+    '<div data-teeth-wrap style="display:none;"></div>',
+    '</div>',
+  ].join('');
+  container.appendChild(row);
+  var sel = row.querySelector('[data-case-select]');
+  populateSingleCaseSelect(sel, pfx, selectedCat[pfx]||'fixed');
+  sel.onchange = function() {
+    updateRowTeeth(row, this.value);
+    onCaseChange(pfx);
+  };
+}
+
+function removeCaseRow(btn) {
+  var container = btn.closest('[id$="-case-rows"]');
+  var card = btn.closest('.case-row');
+  if(container && card && container.children.length > 1) {
+    card.remove();
+    // Renumber remaining cases
+    Array.from(container.children).forEach(function(c, i) {
+      var lbl = c.querySelector('span[style*="CASE"]');
+      if(lbl) lbl.textContent = 'CASE ' + (i+1);
+    });
+  }
+}
+
+function populateSingleCaseSelect(sel, pfx, cat) {
+  var prev = sel.value;
+  sel.innerHTML = '<option value="">— Select Case —</option>';
+  if(cat === 'removable') {
+    [{value:'Upper Denture',label:'🦷 Upper Denture'},{value:'Lower Denture',label:'🦷 Lower Denture'},{value:'Upper Flexible',label:'🦷 Upper Flexible'},{value:'Lower Flexible',label:'🦷 Lower Flexible'}]
+    .forEach(function(d){ var o=document.createElement('option'); o.value=d.value; o.textContent=d.label; sel.appendChild(o); });
+    var HIDDEN = ['Acrylic Denture Base (QC20)','Acrylic Teeth','Flexible Base + One Unit','Flexible Add One Unit'];
+    priceList.filter(function(p){ return p.category==='removable' && HIDDEN.indexOf(p.item)===-1; })
+    .forEach(function(p){ var o=document.createElement('option'); o.value=p.item; o.textContent=p.item; sel.appendChild(o); });
+  } else {
+    priceList.filter(function(p){ return (p.category||'fixed')==='fixed'; })
+    .forEach(function(p){ var o=document.createElement('option'); o.value=p.item; o.textContent=p.item; sel.appendChild(o); });
+  }
+  if(prev) sel.value = prev;
+}
+
+function openDeskEntryModal() {
+  populateDropdowns('d');
+  renderMonthLabel('d');
+  // Reset case rows to 1
+  var container = document.getElementById('d-case-rows');
+  if(container) {
+    container.innerHTML = '';
+    addCaseRow('d');
+  }
+  document.getElementById('desk-entry-modal').classList.add('open');
+  setTimeout(function(){ document.getElementById('d-date').focus(); }, 100);
+}
+
+function closeDeskEntryModal() {
+  document.getElementById('desk-entry-modal').classList.remove('open');
+}
+
+function deskTab(name,btn) {
+  document.querySelectorAll('.desk-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if(btn) btn.classList.add('active');
+  document.getElementById('desk-page-title').textContent=tabLabels[name];
+  if(name==='daily'){populateDropdowns('d');renderRecordTable('d');}
+  if(name==='voucher'){renderVoucherList();}
+}
+
+// ══ TEETH DIAGRAM ══
+function buildTeethDiagram(pfx) {
+  const container = document.getElementById(pfx+'-teeth-diagram');
+  if(!container) return;
+
+  function makeRow(nums) {
+    const row = document.createElement('div');
+    row.className = 'teeth-row';
+    nums.forEach(n => {
+      const btn = document.createElement('button');
+      btn.className = 'tooth-btn';
+      btn.id = pfx+'-tooth-'+n;
+      btn.textContent = n;
+      btn.onclick = () => toggleTooth(pfx, n);
+      row.appendChild(btn);
+    });
+    return row;
+  }
+
+  function mkLbl(t,st){const s=document.createElement('span');s.className='teeth-side-lbl';s.textContent=t;if(st)s.style.cssText=st;return s;}
+
+  const upper=document.createElement('div'); upper.className='teeth-row-wrap';
+  upper.appendChild(mkLbl('R')); upper.appendChild(makeRow(UPPER_RIGHT));
+  upper.appendChild(mkLbl('|','margin:0 4px;color:#2e3348;')); upper.appendChild(makeRow(UPPER_LEFT)); upper.appendChild(mkLbl('L'));
+
+  const div=document.createElement('div'); div.className='teeth-divider'; div.textContent='── UPPER ──────────────── LOWER ──';
+
+  const lower=document.createElement('div'); lower.className='teeth-row-wrap';
+  lower.appendChild(mkLbl('R')); lower.appendChild(makeRow(LOWER_RIGHT));
+  lower.appendChild(mkLbl('|','margin:0 4px;color:#2e3348;')); lower.appendChild(makeRow(LOWER_LEFT)); lower.appendChild(mkLbl('L'));
+
+  container.appendChild(upper); container.appendChild(div); container.appendChild(lower);
+}
+
+function toggleTooth(pfx, n) {
+  const btn = document.getElementById(pfx+'-tooth-'+n);
+  if (btn && btn.classList.contains('tooth-disabled')) return; // blocked by denture restriction
+  if(selectedTeeth[pfx].has(n)) {
+    selectedTeeth[pfx].delete(n);
+    if(btn) btn.classList.remove('sel');
+  } else {
+    selectedTeeth[pfx].add(n);
+    if(btn) btn.classList.add('sel');
+  }
+  updateTeethDisplay(pfx);
+  autoFillQty(pfx);
+}
+
+function updateTeethDisplay(pfx) {
+  const sorted = Array.from(selectedTeeth[pfx]).sort((a,b)=>a-b);
+  const disp = document.getElementById(pfx+'-teeth-display');
+  const manual = document.getElementById(pfx+'-teeth-manual');
+  if(!sorted.length) {
+    disp.textContent='No teeth selected'; disp.classList.add('empty');
+    if(manual) manual.value='';
+  } else {
+    disp.textContent=sorted.join(' '); disp.classList.remove('empty');
+    if(manual) manual.value=sorted.join(' ');
+  }
+}
+
+function syncManual(pfx) {
+  const val = document.getElementById(pfx+'-teeth-manual').value;
+  const nums = val.split(/[\s,]+/).map(n=>parseInt(n)).filter(n=>n>=11&&n<=48);
+  selectedTeeth[pfx].clear();
+  document.querySelectorAll(`[id^="${pfx}-tooth-"]`).forEach(b=>b.classList.remove('sel'));
+  nums.forEach(n=>{ selectedTeeth[pfx].add(n); const btn=document.getElementById(pfx+'-tooth-'+n); if(btn) btn.classList.add('sel'); });
+  const disp=document.getElementById(pfx+'-teeth-display');
+  if(!nums.length){disp.textContent='No teeth selected';disp.classList.add('empty');}
+  else{disp.textContent=nums.join(' ');disp.classList.remove('empty');}
+  autoFillQty(pfx);
+}
+
+function autoFillQty(pfx) {
+  const count = selectedTeeth[pfx].size;
+  if(count > 0) {
+    const qtyEl = document.getElementById(pfx+'-qty');
+    if(qtyEl) qtyEl.value = count;
+  }
+}
+
+function clearTeeth(pfx) {
+  selectedTeeth[pfx].clear();
+  document.querySelectorAll(`[id^="${pfx}-tooth-"]`).forEach(b=>b.classList.remove('sel'));
+  const disp=document.getElementById(pfx+'-teeth-display');
+  disp.textContent='No teeth selected'; disp.classList.add('empty');
+  const manual=document.getElementById(pfx+'-teeth-manual');
+  if(manual) manual.value='';
+}
+
+// ══ POPULATE DROPDOWNS ══
+// Track selected category per form prefix
+var selectedCat = { d: 'fixed', m: 'fixed' };
+
+function setCat(pfx, cat) {
+  selectedCat[pfx] = cat;
+  // Update button styles
+  var fixedBtn = document.getElementById(pfx+'-cat-fixed');
+  var remBtn   = document.getElementById(pfx+'-cat-removable');
+  if(fixedBtn) {
+    fixedBtn.style.borderColor  = cat==='fixed' ? '#16a34a' : '#e2e8f0';
+    fixedBtn.style.background   = cat==='fixed' ? '#e8f5ee' : '#f8f9fb';
+    fixedBtn.style.color        = cat==='fixed' ? '#16a34a' : '#64748b';
+    fixedBtn.style.fontWeight   = cat==='fixed' ? '600' : '400';
+  }
+  if(remBtn) {
+    remBtn.style.borderColor    = cat==='removable' ? '#16a34a' : '#e2e8f0';
+    remBtn.style.background     = cat==='removable' ? '#e8f5ee' : '#f8f9fb';
+    remBtn.style.color          = cat==='removable' ? '#16a34a' : '#64748b';
+    remBtn.style.fontWeight     = cat==='removable' ? '600' : '400';
+  }
+  // Reset case dropdown and repopulate with category filter
+  var caseSel = document.getElementById(pfx+'-case');
+  if(caseSel) {
+    caseSel.innerHTML = '<option value="">— Select Case —</option>';
+    populateCaseDropdown(pfx, cat);
+  }
+  // Also update all dynamic case rows
+  var container = document.getElementById(pfx+'-case-rows');
+  if(container) {
+    Array.from(container.querySelectorAll('[data-case-select]')).forEach(function(sel){
+      populateSingleCaseSelect(sel, pfx, cat);
+    });
+  }
+}
+
+function populateCaseDropdown(pfx, cat) {
+  var caseSel = document.getElementById(pfx+'-case');
+  if(!caseSel) return;
+  var prevCase = caseSel.value;
+  caseSel.innerHTML = '<option value="">— Select Case —</option>';
+
+  if(cat === 'removable') {
+    // Removable special options
+    var remSpecial = [
+      { value: 'Upper Denture',  label: '🦷 Upper Denture'  },
+      { value: 'Lower Denture',  label: '🦷 Lower Denture'  },
+      { value: 'Upper Flexible', label: '🦷 Upper Flexible' },
+      { value: 'Lower Flexible', label: '🦷 Lower Flexible' },
+    ];
+    remSpecial.forEach(function(d) {
+      var opt = document.createElement('option');
+      opt.value = d.value; opt.textContent = d.label;
+      caseSel.appendChild(opt);
+    });
+    // Removable price list items (exclude auto-split ones)
+    var HIDDEN = ['Acrylic Denture Base (QC20)', 'Acrylic Teeth', 'Flexible Base + One Unit', 'Flexible Add One Unit'];
+    priceList.filter(function(p){ return p.category === 'removable' && HIDDEN.indexOf(p.item) === -1; }).forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.item; opt.textContent = p.item;
+      caseSel.appendChild(opt);
+    });
+  } else {
+    // Fixed price list items
+    priceList.filter(function(p){ return (p.category||'fixed') === 'fixed'; }).forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.item; opt.textContent = p.item;
+      caseSel.appendChild(opt);
+    });
+  }
+  if(prevCase) caseSel.value = prevCase;
+  caseSel.onchange = function() { onCaseChange(pfx); };
+}
+
+function populateDropdowns(pfx) {
+  // Clinics
+  const clinicSel = document.getElementById(pfx+'-clinic');
+  if(!clinicSel) return;
+  const prev = clinicSel.value;
+  clinicSel.innerHTML = '<option value="">— Select Clinic —</option>';
+  const uniqueClinics = [...new Set(clinics.map(c=>c.clinic).filter(Boolean))];
+  uniqueClinics.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    clinicSel.appendChild(opt);
+  });
+  // Add new option
+  const addOpt = document.createElement('option');
+  addOpt.value = '__add__'; addOpt.textContent = '+ Add New Clinic...';
+  clinicSel.appendChild(addOpt);
+  if(prev) clinicSel.value = prev;
+
+  // Doctor dropdown — populate ALL unique doctors
+  const doctorSel = document.getElementById(pfx+'-doctor');
+  if(doctorSel) {
+    const prevDoc = doctorSel.value;
+    doctorSel.innerHTML = '<option value="">— Select Doctor —</option>';
+    const uniqueDoctors = [...new Set(clinics.map(c=>c.doctor).filter(Boolean))];
+    uniqueDoctors.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      doctorSel.appendChild(opt);
+    });
+    if(prevDoc) doctorSel.value = prevDoc;
+    doctorSel.onchange = function() { onDoctorChange(pfx); };
+  }
+
+  // Cases — use category-filtered function
+  populateCaseDropdown(pfx, selectedCat[pfx] || "fixed");
+}
+
+function onCaseChange(pfx) {
+  const caseType = document.getElementById(pfx+'-case').value;
+  const UPPER_NUMS = [...UPPER_RIGHT, ...UPPER_LEFT];
+  const LOWER_NUMS = [...LOWER_RIGHT, ...LOWER_LEFT];
+
+  if (caseType === 'Upper Denture' || caseType === 'Upper Flexible') {
+    // Disable lower teeth
+    LOWER_NUMS.forEach(function(n) {
+      const btn = document.getElementById(pfx+'-tooth-'+n);
+      if (btn) { btn.classList.add('tooth-disabled'); btn.classList.remove('sel'); }
+      selectedTeeth[pfx].delete(n);
+    });
+    UPPER_NUMS.forEach(function(n) {
+      const btn = document.getElementById(pfx+'-tooth-'+n);
+      if (btn) btn.classList.remove('tooth-disabled');
+    });
+    updateTeethDisplay(pfx);
+    autoFillQty(pfx);
+  } else if (caseType === 'Lower Denture' || caseType === 'Lower Flexible') {
+    // Disable upper teeth
+    UPPER_NUMS.forEach(function(n) {
+      const btn = document.getElementById(pfx+'-tooth-'+n);
+      if (btn) { btn.classList.add('tooth-disabled'); btn.classList.remove('sel'); }
+      selectedTeeth[pfx].delete(n);
+    });
+    LOWER_NUMS.forEach(function(n) {
+      const btn = document.getElementById(pfx+'-tooth-'+n);
+      if (btn) btn.classList.remove('tooth-disabled');
+    });
+    updateTeethDisplay(pfx);
+    autoFillQty(pfx);
+  } else {
+    // Not a denture — re-enable all teeth
+    [...UPPER_NUMS, ...LOWER_NUMS].forEach(function(n) {
+      const btn = document.getElementById(pfx+'-tooth-'+n);
+      if (btn) btn.classList.remove('tooth-disabled');
+    });
+  }
+}
+
+function onClinicChange(pfx) {
+  const val = document.getElementById(pfx+'-clinic').value;
+  if(val === '__add__') {
+    document.getElementById(pfx+'-clinic').value = '';
+    openClinicModal();
+    return;
+  }
+  // Auto-fill doctors from this clinic
+  const doctorSel = document.getElementById(pfx+'-doctor');
+  doctorSel.innerHTML = '<option value="">— Select Doctor —</option>';
+  const allDocs = [...new Set(clinics.map(c=>c.doctor).filter(Boolean))];
+  allDocs.forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    doctorSel.appendChild(opt);
+  });
+  if(!val) return;
+  const matched = clinics.filter(c=>c.clinic===val && c.doctor);
+  if(matched.length===1) doctorSel.value = matched[0].doctor;
+}
+
+function onDoctorChange(pfx) {
+  const doctor = document.getElementById(pfx+'-doctor').value;
+  if(!doctor) return;
+  // Auto-fill clinic from this doctor
+  const clinicSel = document.getElementById(pfx+'-clinic');
+  const matched = clinics.filter(c=>c.doctor===doctor && c.clinic);
+  if(matched.length===1) {
+    clinicSel.value = matched[0].clinic;
+  }
+}
+
+// ══ SUBMIT ENTRY ══
+function submitEntry(pfx) {
+  const date   = document.getElementById(pfx+'-date').value;
+  const clinic = document.getElementById(pfx+'-clinic').value;
+  const doctor = document.getElementById(pfx+'-doctor').value;
+
+  const remark = document.getElementById(pfx+'-remark').value.trim();
+
+  // Get case rows
+  var caseRows = [];
+  var container = document.getElementById(pfx+'-case-rows');
+  if(container) {
+    Array.from(container.children).forEach(function(row) {
+      var sel = row.querySelector('[data-case-select]');
+      var pat = row.querySelector('[data-patient-input]');
+      var shd = row.querySelector('[data-shade-input]');
+      var qtyEl = row.querySelector('[data-qty-input]');
+      var twrap = row.querySelector('[data-teeth-wrap]');
+      var ul  = row.querySelector('[data-ul-select]');
+      var teethVal = '';
+      var qtyVal = qtyEl ? (qtyEl.value || '1') : '1';
+      if(twrap && twrap.getAttribute('data-teeth-key')) {
+        var key = twrap.getAttribute('data-teeth-key');
+        if(rowTeeth[key]) teethVal = Array.from(rowTeeth[key]).sort(function(a,b){return a-b;}).join(' ');
+      } else if(ul) teethVal = ul.value;
+      if(sel && sel.value) {
+        caseRows.push({
+          caseType: sel.value,
+          patient:  pat ? pat.value.trim() : '',
+          shade:    shd ? shd.value.trim() : '',
+          teethNo:  teethVal,
+          qty:      qtyVal
+        });
+      }
+    });
+  }
+  if(!caseRows.length) { showToast('⚠ Please select at least one Case Type'); return; }
+  if(!date||!clinic||!doctor) { showToast('⚠ Please fill Date, Clinic & Doctor'); return; }
+
+  const base = { date, clinicName: clinic, doctorName: doctor, remark };
+  var ts = Date.now();
+  const entryMonth = date.slice(0,7);
+  const yr2d = date.slice(2,4);
+
+  // Find voucherNo for this doctor+clinic+month
+  // Check existing unpaid entries for same doctor+clinic+month
+  function getOrCreateVoucherNo(doctor, clinic, month) {
+    // Look for existing unpaid entries with same doctor+clinic+month
+    const existing = entries.filter(function(e) {
+      return e.doctorName === doctor && e.clinicName === clinic &&
+             e.date && e.date.startsWith(month) &&
+             localStorage.getItem('paid_'+e.id) !== '1' &&
+             e.voucherNo;
+    });
+    if(existing.length) return existing[0].voucherNo;
+    // Generate new voucherNo
+    const fullYear = parseInt('20'+yr2d);
+    if(fullYear > invoiceYear) {
+      invoiceCounter = 1000;
+      invoiceYear = fullYear;
+      localStorage.setItem('invoiceYear', invoiceYear);
+    }
+    invoiceCounter++;
+    const vNo = invoiceCounter + '/' + yr2d;
+    localStorage.setItem('invoiceCounter', invoiceCounter);
+    return vNo;
+  }
+
+  caseRows.forEach(function(cr) {
+    const caseType = cr.caseType;
+    const qty = cr.qty || "1";
+    const voucherNo = getOrCreateVoucherNo(doctor, clinic, entryMonth);
+    const eb = Object.assign({}, base, { patientName: cr.patient, shade: cr.shade, teethNo: cr.teethNo, voucherNo: voucherNo });
+    if (caseType === "Upper Denture" || caseType === "Lower Denture") {
+      const tc = parseInt(qty) || 1;
+      const e1 = Object.assign({}, eb, { id: ts++, caseType: "Acrylic Denture Base (QC20)", quantity: "1", unitPrice: getUnitPrice("Acrylic Denture Base (QC20)") });
+      const e2 = Object.assign({}, eb, { id: ts++, caseType: "Acrylic Teeth", quantity: String(tc), unitPrice: getUnitPrice("Acrylic Teeth") });
+      entries.unshift(e2); entries.unshift(e1); fbSaveEntry(e1); fbSaveEntry(e2);
+    } else if (caseType === "Upper Flexible" || caseType === "Lower Flexible") {
+      const e1 = Object.assign({}, eb, { id: ts++, caseType: "Flexible Base + One Unit", quantity: "1", unitPrice: getUnitPrice("Flexible Base + One Unit") });
+      entries.unshift(e1); fbSaveEntry(e1);
+      if(parseInt(qty) > 1) {
+        const e2 = Object.assign({}, eb, { id: ts++, caseType: "Flexible Add One Unit", quantity: String(parseInt(qty)-1), unitPrice: getUnitPrice("Flexible Add One Unit") });
+        entries.unshift(e2); fbSaveEntry(e2);
+      }
+    } else {
+      const e = Object.assign({}, eb, { id: ts++, caseType, quantity: qty, unitPrice: getUnitPrice(caseType) });
+      entries.unshift(e); fbSaveEntry(e);
+    }
+  });
+
+  localStorage.setItem('dentalEntries', JSON.stringify(entries));
+  clearForm(pfx);
+  populateDropdowns(pfx);
+  viewMonth['d'] = date.slice(0,7);
+  viewMonth['m'] = date.slice(0,7);
+  renderMonthLabel('d'); renderMonthLabel('m');
+  renderRecordTable('d'); renderRecordTable('m');
+  renderMobRecent(); renderDeskRecent();
+  document.getElementById('desk-today-num').textContent = entries.filter(e=>e.date===todayStr).length;
+  document.getElementById('desk-month-num').textContent = entries.filter(e=>e.date&&e.date.startsWith(todayStr.slice(0,7))).length;
+  if(pfx==='m') closeMobForm();
+  if(pfx==='d') closeDeskEntryModal();
+  showToast('✓ '+caseRows.length+' case(s) added');
+}
+function clearForm(pfx) {
+  var dateEl = document.getElementById(pfx+'-date');
+  if(dateEl) dateEl.value = todayStr;
+  var remarkEl = document.getElementById(pfx+'-remark');
+  if(remarkEl) remarkEl.value = '';
+  // Reset clinic dropdown
+  var clinicSel = document.getElementById(pfx+'-clinic');
+  if(clinicSel) { clinicSel.selectedIndex = 0; clinicSel.value = ''; }
+  // Reset doctor dropdown
+  var doctorSel = document.getElementById(pfx+'-doctor');
+  if(doctorSel) doctorSel.innerHTML = '<option value=>— Select Doctor —</option>';
+  // Reset category to fixed and case rows
+  setCat(pfx, 'fixed');
+  var container = document.getElementById(pfx+'-case-rows');
+  if(container) { container.innerHTML = ''; addCaseRow(pfx); }
+}
+
+// ══ MONTHLY RECORDS ══
+function changeMonth(dir, pfx) {
+  const [y,m] = viewMonth[pfx].split('-').map(Number);
+  const d = new Date(y, m-1+dir, 1);
+  viewMonth[pfx] = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  renderMonthLabel(pfx);
+  renderRecordTable(pfx);
+}
+
+function renderMonthLabel(pfx) {
+  const [y,m] = viewMonth[pfx].split('-').map(Number);
+  const label = new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  document.getElementById(pfx+'-month-label').textContent = label;
+}
+
+function renderRecordTable(pfx) {
+  const tbody = document.getElementById(pfx+'-record-body');
+  if(!tbody) return;
+  const filtered = entries
+    .filter(e=>e.date && e.date.trim().startsWith(viewMonth[pfx]))
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||'')||Number(b.id)-Number(a.id));
+  if(!filtered.length) {
+    const cols = pfx==='d' ? 11 : 7;
+    tbody.innerHTML=`<tr><td colspan="${cols}" class="tbl-empty">No records for this month.</td></tr>`;
+    return;
+  }
+  if(pfx==='d') {
+    tbody.innerHTML = filtered.map((e,i)=>{
+      const isPaid = localStorage.getItem('paid_'+e.id)==='1';
+      if(isPaid) {
+        // Locked row - read only
+        return `<tr class="rec-row-locked">
+          <td class="cell-no">${i+1}</td>
+          <td>${esc(e.date)}</td>
+          <td>${esc(e.clinicName)}</td>
+          <td>${esc(e.doctorName)}</td>
+          <td>${esc(e.patientName)}</td>
+          <td>${esc(e.caseType)}</td>
+          <td>${esc(e.shade)}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:0.76rem;">${esc(e.teethNo)}</td>
+          <td>${esc(e.quantity)}</td>
+          <td>${esc(e.remark)}</td>
+          <td class="del-cell"><span class="rec-paid-lock">🔒 Paid</span></td>
+        </tr>`;
+      }
+      return `<tr>
+        <td class="cell-no">${i+1}</td>
+        <td><input class="cell-input" value="${esc(e.date)}" type="date" onchange="editEntry('${e.id}','date',this.value)"/></td>
+        <td><input class="cell-input" value="${esc(e.clinicName)}" onchange="editEntry('${e.id}','clinicName',this.value)"/></td>
+        <td><input class="cell-input" value="${esc(e.doctorName)}" onchange="editEntry('${e.id}','doctorName',this.value)"/></td>
+        <td><input class="cell-input" value="${esc(e.patientName)}" onchange="editEntry('${e.id}','patientName',this.value)"/></td>
+        <td><input class="cell-input" value="${esc(e.caseType)}" onchange="editEntry('${e.id}','caseType',this.value)"/></td>
+        <td><input class="cell-input" value="${esc(e.shade)}" onchange="editEntry('${e.id}','shade',this.value)"/></td>
+        <td><input class="cell-input" value="${esc(e.teethNo)}" style="font-family:'DM Mono',monospace;font-size:0.76rem;" onchange="editEntry('${e.id}','teethNo',this.value)"/></td>
+        <td><input class="cell-input" type="number" value="${esc(e.quantity)}" style="width:60px;" onchange="editEntry('${e.id}','quantity',this.value)"/></td>
+        <td><input class="cell-input" value="${esc(e.remark)}" onchange="editEntry('${e.id}','remark',this.value)"/></td>
+        <td class="del-cell"><button class="del-btn" onclick="deleteEntry('${e.id}')">✕</button></td>
+      </tr>`;
+    }).join('');
+  } else {
+    tbody.innerHTML = filtered.map((e,i)=>{
+      const isPaid = localStorage.getItem('paid_'+e.id)==='1';
+      const actionCell = isPaid
+        ? `<span class="rec-paid-lock">🔒 Paid</span>`
+        : `<button class="del-btn" style="color:var(--blue);opacity:0.6;" title="Edit" onclick="openEditEntryModal('${e.id}')">✎</button>
+           <button class="del-btn" onclick="deleteEntry('${e.id}');renderRecordTable('m');renderRecordTable('d');">✕</button>`;
+      return `<tr${isPaid?' class="rec-row-locked"':''}>
+        <td style="font-family:'DM Mono',monospace;font-size:0.76rem;color:var(--muted);padding:8px 10px;">${e.date}</td>
+        <td style="padding:8px 10px;">${esc(e.clinicName)||'—'}</td>
+        <td style="padding:8px 10px;">${esc(e.doctorName)||'—'}</td>
+        <td style="padding:8px 10px;"><span class="cbadge">${esc(e.caseType)||'—'}</span></td>
+        <td style="font-family:'DM Mono',monospace;font-size:0.74rem;padding:8px 10px;">${esc(e.teethNo)||'—'}</td>
+        <td style="text-align:center;padding:8px 10px;">${esc(e.quantity)||'—'}</td>
+        <td class="del-cell" style="width:70px;">${actionCell}</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+// ══ EDIT ENTRY MODAL ══
+function openEditEntryModal(id) {
+  const entry = entries.find(e => String(e.id).trim() === String(id).trim());
+  if(!entry) { showToast('⚠ Entry not found: ' + id); return; }
+  document.getElementById('ee-id').value      = String(id);
+  document.getElementById('ee-date').value    = entry.date||'';
+  document.getElementById('ee-clinic').value  = entry.clinicName||'';
+  document.getElementById('ee-doctor').value  = entry.doctorName||'';
+  document.getElementById('ee-case').value    = entry.caseType||'';
+  document.getElementById('ee-shade').value   = entry.shade||'';
+  document.getElementById('ee-qty').value     = entry.quantity||'';
+  document.getElementById('ee-patient').value = entry.patientName||'';
+  document.getElementById('ee-teeth').value   = entry.teethNo||'';
+  document.getElementById('ee-remark').value  = entry.remark||'';
+  document.getElementById('edit-entry-modal').style.display = 'flex';
+}
+function closeEditEntryModal() { document.getElementById('edit-entry-modal').style.display = 'none'; }
+function saveEditEntry() {
+  const id = document.getElementById('ee-id').value;
+  const entry = entries.find(e=>String(e.id)===String(id));
+  if(!entry) return;
+  entry.date        = document.getElementById('ee-date').value;
+  entry.clinicName  = document.getElementById('ee-clinic').value.trim();
+  entry.doctorName  = document.getElementById('ee-doctor').value.trim();
+  entry.caseType    = document.getElementById('ee-case').value.trim();
+  entry.shade       = document.getElementById('ee-shade').value.trim();
+  entry.quantity    = document.getElementById('ee-qty').value;
+  entry.patientName = document.getElementById('ee-patient').value.trim();
+  entry.teethNo     = document.getElementById('ee-teeth').value.trim();
+  entry.remark      = document.getElementById('ee-remark').value.trim();
+  localStorage.setItem('dentalEntries', JSON.stringify(entries));
+  fbSaveEntry(entry); // save only this entry
+  closeEditEntryModal();
+  renderRecordTable('m');
+  renderRecordTable('d');
+  renderDeskRecent();
+  renderMobRecent();
+  showToast('✓ Record updated');
+}
+
+function editEntry(id, field, val) {
+  const entry = entries.find(e=>String(e.id)===String(id));
+  if(entry) { entry[field]=val; localStorage.setItem('dentalEntries',JSON.stringify(entries)); fbSaveEntry(entry); }
+}
+
+function deleteEntry(id) {
+  showConfirm('Delete Record?','Are you sure you want to delete this record?',function(){
+  entries = entries.filter(e=>String(e.id)!==String(id));
+  localStorage.setItem('dentalEntries',JSON.stringify(entries));
+  fbDeleteEntry(id); // delete only this entry from Firebase
+  renderRecordTable('d');
+  renderRecordTable('m');
+  renderMobRecent();
+  renderDeskRecent();
+  showToast('Record deleted');
+  });
+}
+
+function openRecordsModal(){renderRecordTable('d');renderMonthLabel('d');document.getElementById('records-modal').classList.add('open');}
+function closeRecordsModal(){document.getElementById('records-modal').classList.remove('open');}
+
+// ══ CLINIC TABLE ══
+function renderClinicTable() {
+  const emptyD='<tr><td colspan="7" class="tbl-empty">No clinics yet — click "+ Add Clinic".</td></tr>';
+  const emptyM='<tr><td colspan="6" class="tbl-empty">No clinics yet.</td></tr>';
+  if(!clinics.length){
+    document.getElementById('desk-clinic-body').innerHTML=emptyD;
+    document.getElementById('mob-clinic-body').innerHTML=emptyM;
+    return;
+  }
+  document.getElementById('desk-clinic-body').innerHTML=clinics.map((c,i)=>`<tr>
+    <td class="cell-no">${i+1}</td>
+    <td><input class="cell-input" value="${esc(c.clinic)}" onchange="editClinic(${i},'clinic',this.value)" placeholder="Clinic"/></td>
+    <td><input class="cell-input" value="${esc(c.doctor)}" onchange="editClinic(${i},'doctor',this.value)" placeholder="Doctor"/></td>
+    <td><input class="cell-input" value="${esc(c.address)}" onchange="editClinic(${i},'address',this.value)" placeholder="Address"/></td>
+    <td><input class="cell-input" value="${esc(c.phone)}" onchange="editClinic(${i},'phone',this.value)" placeholder="Phone"/></td>
+    <td><input class="cell-input" value="${esc(c.email)}" onchange="editClinic(${i},'email',this.value)" placeholder="Email"/></td>
+    <td class="del-cell"><button class="del-btn" onclick="deleteClinic(${i})">✕</button></td></tr>`).join('');
+  document.getElementById('mob-clinic-body').innerHTML=clinics.map((c,i)=>`<tr>
+    <td class="cell-no">${i+1}</td>
+    <td style="padding:8px 10px;">${esc(c.clinic)||'—'}</td>
+    <td style="padding:8px 10px;">${esc(c.doctor)||'—'}</td>
+    <td style="padding:8px 10px;">${esc(c.phone)||'—'}</td>
+    <td style="padding:8px 10px;">${esc(c.email)||'—'}</td>
+    <td class="del-cell">
+      <button class="del-btn" style="color:var(--blue);opacity:0.7;" onclick="openEditClinicModal(${i})">✎</button>
+      <button class="del-btn" onclick="deleteClinic(${i})">✕</button>
+    </td></tr>`).join('');
+  document.getElementById('st-clinics').textContent=clinics.length;
+}
+
+// ══ PRICE TABLE ══
+function renderPriceTable() {
+  var fixed     = priceList.filter(function(p){ return (p.category||'fixed')==='fixed'; });
+  var removable = priceList.filter(function(p){ return p.category==='removable'; });
+  function buildRows(list) {
+    if(!list.length) return '<tr><td colspan=5 class=tbl-empty>No items.</td></tr>';
+    return list.map(function(p) {
+      var gi = priceList.indexOf(p);
+      if(gi < 0) return ''; // safety check
+      var item = esc(p.item); var unit = esc(p.unit); var price = p.price||'';
+      return [
+        '<tr>',
+        '<td class=cell-no>'+(gi+1)+'</td>',
+        '<td><input class=cell-input value=\''+item+'\' onchange=\'editPrice('+gi+',&quot;item&quot;,this.value)\'/></td>',
+        '<td><input class=cell-input value=\''+unit+'\' onchange=\'editPrice('+gi+',&quot;unit&quot;,this.value)\'/></td>',
+        '<td><input class=cell-input type=number value=\''+price+'\' onchange=\'editPrice('+gi+',&quot;price&quot;,this.value)\'/></td>',
+        '<td class=del-cell><button class=del-btn onclick=\'deletePrice('+gi+')\'>✕</button></td>',
+        '</tr>'
+      ].join('');
+    }).join('');
+  }
+  var hdrStyle = 'background:#1a3324;color:#7ecf9a;font-size:0.65rem;letter-spacing:0.1em;padding:8px 12px;text-transform:uppercase;';
+  var content = '<tr><td colspan=5 style=\''+hdrStyle+'\'>🔩 Fixed</td></tr>'
+    + buildRows(fixed)
+    + '<tr><td colspan=5 style=\''+hdrStyle+'\'>🦷 Removable</td></tr>'
+    + buildRows(removable);
+  var d = document.getElementById('desk-price-body');
+  var m = document.getElementById('mob-price-body');
+  if(d) d.innerHTML = content;
+  if(m) m.innerHTML = content;
+}
+// ══ CLINIC CRUD ══
+function openClinicModal(){clearClinicForm();document.getElementById('clinic-modal').classList.add('open');setTimeout(()=>document.getElementById('c-clinic').focus(),50);}
+function closeClinicModal(){document.getElementById('clinic-modal').classList.remove('open');}
+function clearClinicForm(){['c-clinic','c-doctor','c-address','c-phone','c-email'].forEach(id=>document.getElementById(id).value='');}
+function saveClinic(){
+  const clinic=document.getElementById('c-clinic').value.trim();
+  if(!clinic){document.getElementById('c-clinic').focus();return;}
+  clinics.push({clinic,doctor:document.getElementById('c-doctor').value.trim(),address:document.getElementById('c-address').value.trim(),phone:document.getElementById('c-phone').value.trim(),email:document.getElementById('c-email').value.trim()});
+  persistAll();renderClinicTable();closeClinicModal();
+  populateDropdowns('d');populateDropdowns('m');
+  showToast('✓ Clinic added');
+}
+function editClinic(i,field,val){
+  clinics[i][field]=val;
+  persistAll();
+  populateDropdowns('d');
+  populateDropdowns('m');
+}
+
+function openEditClinicModal(i) {
+  const c = clinics[i];
+  if(!c) return;
+  document.getElementById('ec-idx').value   = i;
+  document.getElementById('ec-clinic').value  = c.clinic||'';
+  document.getElementById('ec-doctor').value  = c.doctor||'';
+  document.getElementById('ec-address').value = c.address||'';
+  document.getElementById('ec-phone').value   = c.phone||'';
+  document.getElementById('ec-email').value   = c.email||'';
+  document.getElementById('edit-clinic-modal').style.display = 'flex';
+}
+function closeEditClinicModal() { document.getElementById('edit-clinic-modal').style.display = 'none'; }
+function saveEditClinic() {
+  const i = parseInt(document.getElementById('ec-idx').value);
+  if(isNaN(i) || !clinics[i]) return;
+  clinics[i].clinic  = document.getElementById('ec-clinic').value.trim();
+  clinics[i].doctor  = document.getElementById('ec-doctor').value.trim();
+  clinics[i].address = document.getElementById('ec-address').value.trim();
+  clinics[i].phone   = document.getElementById('ec-phone').value.trim();
+  clinics[i].email   = document.getElementById('ec-email').value.trim();
+  persistAll();
+  renderClinicTable();
+  populateDropdowns('d');
+  populateDropdowns('m');
+  closeEditClinicModal();
+  showToast('✓ Clinic updated');
+}
+function deleteClinic(i){showConfirm('Delete Clinic?','Are you sure you want to delete "'+clinics[i].clinic+'"?',function(){clinics.splice(i,1);persistAll();renderClinicTable();populateDropdowns('d');populateDropdowns('m');showToast('Clinic deleted');});}
+
+// ══ PRICE CRUD ══
+function openPriceModal(){clearPriceForm();document.getElementById('price-modal').classList.add('open');setTimeout(()=>document.getElementById('p-item').focus(),50);}
+function closePriceModal(){document.getElementById('price-modal').classList.remove('open');}
+function clearPriceForm(){["p-item","p-unit","p-price"].forEach(id=>document.getElementById(id).value="");document.getElementById("p-category").value="fixed";document.getElementById("p-teeth-group").value="A";}
+function savePrice(){
+  const item=document.getElementById("p-item").value.trim();
+  if(!item){document.getElementById("p-item").focus();return;}
+  const category=document.getElementById("p-category").value||"fixed";
+  const teeth_group=document.getElementById("p-teeth-group").value||"A";
+  priceList.push({item,unit:document.getElementById("p-unit").value.trim(),price:document.getElementById("p-price").value.trim(),category,teeth_group});
+  persistAll();renderPriceTable();closePriceModal();
+  populateDropdowns("d");populateDropdowns("m");
+  showToast("✓ Price item added");
+}
+function editPrice(i,field,val){priceList[i][field]=val;persistAll();}
+function deletePrice(i){
+  if(i < 0 || i >= priceList.length) return;
+  showConfirm('Delete Item?','Are you sure you want to delete "'+priceList[i].item+'"?',function(){
+    priceList.splice(i,1);
+    persistAll();
+    renderPriceTable();
+    populateDropdowns('d');
+    populateDropdowns('m');
+    showToast('Item deleted');
+  });
+}
+
+// ══ LAB INFO ══
+function loadLabInfo(){
+  document.getElementById('inf-name').textContent    =labInfo.name    ||'Dollar Dental Lab';
+  document.getElementById('inf-phone').textContent   =labInfo.phone   ||'—';
+  document.getElementById('inf-email').textContent   =labInfo.email   ||'—';
+  document.getElementById('inf-hours').textContent   =labInfo.hours   ||'—';
+  document.getElementById('inf-address').textContent =labInfo.address ||'—';
+  document.getElementById('inf-notes').textContent   =labInfo.notes   ||'—';
+}
+function openLabModal(){['name','phone','email','hours','address','notes'].forEach(k=>document.getElementById('e-'+k).value=labInfo[k]||'');document.getElementById('lab-modal').classList.add('open');}
+function closeLabModal(){document.getElementById('lab-modal').classList.remove('open');}
+function saveLabInfo(){['name','phone','email','hours','address','notes'].forEach(k=>labInfo[k]=document.getElementById('e-'+k).value.trim());localStorage.setItem('dentalLabInfo',JSON.stringify(labInfo));syncLabInfo();loadLabInfo();closeLabModal();showToast('✓ Lab info saved');}
+
+// ══ RECENT ══
+function renderMobRecent(){
+  const el=document.getElementById('mob-recent');
+  if(!entries.length){el.innerHTML='<div class="empty-recent">No entries yet</div>';return;}
+  el.innerHTML=entries.slice(0,5).map(e=>`<div class="recent-card"><div class="recent-dot"></div><div class="recent-info"><div class="recent-name">${esc(e.doctorName)||'—'}${e.patientName?' · '+esc(e.patientName):''}</div><div class="recent-meta">${esc(e.caseType)||'—'}${e.shade?' · '+esc(e.shade):''}${e.teethNo?' · '+esc(e.teethNo):''}</div></div><div class="recent-date">${e.date||''}</div></div>`).join('');
+}
+function renderDeskRecent(){
+  const el=document.getElementById('desk-recent');
+  if(!entries.length){el.innerHTML='<div class="desk-empty">No entries yet — add your first case in Daily Record.</div>';return;}
+  el.innerHTML=`<table class="rtable"><thead><tr><th>Date</th><th>Clinic</th><th>Doctor</th><th>Patient</th><th>Case</th><th>Shade</th><th>Teeth</th><th>Qty</th></tr></thead><tbody>${entries.slice(0,10).map(e=>`<tr><td style="font-family:'DM Mono',monospace;font-size:0.76rem;color:var(--muted);">${e.date||'—'}</td><td>${esc(e.clinicName)||'—'}</td><td>${esc(e.doctorName)||'—'}</td><td>${esc(e.patientName)||'—'}</td><td><span class="cbadge">${esc(e.caseType)||'—'}</span></td><td style="font-family:'DM Mono',monospace;">${esc(e.shade)||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:0.76rem;">${esc(e.teethNo)||'—'}</td><td style="text-align:center;">${e.quantity||'—'}</td></tr>`).join('')}</tbody></table>`;
+}
+
+// ══ HELPERS ══
+// ══ PASSWORD LOCK ══
+// ══ PASSWORD SYSTEM ══
+const DEFAULT_ADMIN_PW = 'Dollar2024';
+const DEFAULT_TECH_PW  = '0000';
+
+function getAdminPassword() { return localStorage.getItem('adminPassword') || DEFAULT_ADMIN_PW; }
+function getTechPassword()  { return localStorage.getItem('techPassword')  || DEFAULT_TECH_PW;  }
+
+function initLockScreen() {
+  const lock = document.getElementById('lock-screen');
+  // Skip lock when testing locally
+  if (window.location.protocol === 'file:') { lock.style.display = 'none'; return; }
+  const role = sessionStorage.getItem('userRole');
+  if (role === 'admin' || role === 'tech') {
+    lock.style.display = 'none';
+    applyRole(role);
+  } else {
+    lock.style.display = 'flex';
+    setTimeout(function(){ document.getElementById('lock-input').focus(); }, 100);
+  }
+}
+
+function checkPassword() {
+  const input = document.getElementById('lock-input').value;
+  const err   = document.getElementById('lock-error');
+  // Reveal app content
+  function unlockApp() {
+    document.getElementById('lock-screen').style.display = 'none';
+    document.querySelector('.desktop-layout') && (document.querySelector('.desktop-layout').style.visibility = '');
+    document.querySelector('.mobile-layout') && (document.querySelector('.mobile-layout').style.visibility = '');
+    err.textContent = '';
+  }
+  if (input === getAdminPassword()) {
+    sessionStorage.setItem('userRole', 'admin');
+    unlockApp();
+    applyRole('admin');
+  } else if (input === getTechPassword()) {
+    sessionStorage.setItem('userRole', 'tech');
+    unlockApp();
+    applyRole('tech');
+  } else {
+    err.textContent = '✕ Incorrect password. Please try again.';
+    document.getElementById('lock-input').value = '';
+    document.getElementById('lock-input').focus();
+  }
+}
+
+function applyRole(role) {
+  if (role === 'tech') {
+    // Hide sidebar completely
+    var sidebar = document.getElementById('desk-sidebar');
+    var main    = document.getElementById('desk-main');
+    if(sidebar) sidebar.style.display = 'none';
+    if(main)    main.style.marginLeft = '0';
+    // Hide mobile home, go directly to daily record
+    var mobHome = document.getElementById('mob-home');
+    if(mobHome) mobHome.style.display = 'none';
+    setTimeout(function(){
+      // Desktop: switch to daily record tab
+      deskTab('daily', null);
+      // Mobile: open daily record
+      mobOpen('mob-daily');
+      populateDropdowns('m');
+      renderRecordTable('m');
+      renderMonthLabel('m');
+    }, 100);
+    // Show logout button in topbar for technician
+    var techBtn = document.getElementById('tech-logout-btn');
+    if(techBtn) techBtn.style.display = 'flex';
+    showToast('🔧 Technician mode');
+  } else {
+    // Admin: show everything normally
+    var sidebar = document.getElementById('desk-sidebar');
+    var main    = document.getElementById('desk-main');
+    if(sidebar) sidebar.style.display = '';
+    if(main)    main.style.marginLeft = '220px';
+    var mobHome = document.getElementById('mob-home');
+    if(mobHome) mobHome.style.display = '';
+    document.querySelectorAll('.nav-item').forEach(function(el){ el.style.display = ''; });
+    showToast('👑 Admin mode');
+  }
+}
+
+function toggleLockPw() {
+  const inp = document.getElementById('lock-input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+let _cpRole = 'admin';
+function setCpRole(role) {
+  _cpRole = role;
+  document.getElementById('cp-role-admin').style.borderColor = role==='admin' ? '#16a34a' : '#e2e8f0';
+  document.getElementById('cp-role-admin').style.background  = role==='admin' ? '#e8f5ee' : '#f8f9fb';
+  document.getElementById('cp-role-admin').style.color       = role==='admin' ? '#16a34a' : '#64748b';
+  document.getElementById('cp-role-tech').style.borderColor  = role==='tech'  ? '#16a34a' : '#e2e8f0';
+  document.getElementById('cp-role-tech').style.background   = role==='tech'  ? '#e8f5ee' : '#f8f9fb';
+  document.getElementById('cp-role-tech').style.color        = role==='tech'  ? '#16a34a' : '#64748b';
+}
+
+function showChangePassword() {
+  _cpRole = 'admin';
+  setCpRole('admin');
+  document.getElementById('change-pw-modal').style.display = 'flex';
+  ['cp-current','cp-new','cp-confirm'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('cp-error').textContent = '';
+}
+
+function closeChangePw() { document.getElementById('change-pw-modal').style.display = 'none'; }
+
+function doChangePassword() {
+  const current = document.getElementById('cp-current').value;
+  const newPw   = document.getElementById('cp-new').value;
+  const confirm = document.getElementById('cp-confirm').value;
+  const err     = document.getElementById('cp-error');
+  const stored  = _cpRole === 'admin' ? getAdminPassword() : getTechPassword();
+
+  if (current !== stored)    { err.textContent = '✕ Current password is incorrect.'; return; }
+  if (newPw.length < 4)      { err.textContent = '✕ New password must be at least 4 characters.'; return; }
+  if (newPw !== confirm)     { err.textContent = '✕ Passwords do not match.'; return; }
+
+  if (_cpRole === 'admin') localStorage.setItem('adminPassword', newPw);
+  else                     localStorage.setItem('techPassword',  newPw);
+
+  closeChangePw();
+  showToast('✓ ' + (_cpRole==='admin'?'Admin':'Technician') + ' password changed!');
+}
+// ══ FIREBASE COMPAT ══
+// ══ FIREBASE SDK FUNCTIONS ══
+async function fbSaveEntry(entry) {
+  try { await window._fbSet("entries/" + String(entry.id), entry); showSyncStatus("ok"); }
+  catch(e) { console.error("fbSaveEntry:", e); showSyncStatus("offline"); }
+}
+
+async function fbDeleteEntry(id) {
+  try { await window._fbRemove("entries/" + String(id)); showSyncStatus("ok"); }
+  catch(e) { console.error("fbDeleteEntry:", e); showSyncStatus("offline"); }
+}
+
+async function fbSavePayment(id, paid) {
+  try { await window._fbSet("payments/" + String(id), paid); }
+  catch(e) { console.error("fbSavePayment:", e); }
+}
+
+var _writeTimer = null;
+function syncToCloud() {
+  clearTimeout(_writeTimer);
+  _writeTimer = setTimeout(async function() {
+    try {
+      var clinicsObj = {}; clinics.forEach(function(c,i){ clinicsObj["clinic_"+i]=c; });
+      var priceObj = {};  priceList.forEach(function(p,i){ priceObj["item_"+i]=p; });
+      await Promise.all([window._fbSet("clinics", clinicsObj), window._fbSet("pricelist", priceObj)]);
+      showSyncStatus("ok");
+    } catch(e) { showSyncStatus("offline"); }
+  }, 800);
+}
+
+async function syncLabInfo() {
+  try { await window._fbSet("labinfo", Object.assign({}, labInfo)); }
+  catch(e) { console.error("syncLabInfo:", e); }
+}
+
+// ══ FIREBASE SYNC FUNCTIONS ══
+async function loadFromCloud() {
+  showSyncStatus('syncing');
+
+  // Wait for Firebase SDK
+  let waited = 0;
+  while(!window._fbReady && waited < 8000) {
+    await new Promise(function(r){ setTimeout(r, 200); });
+    waited += 200;
+  }
+  if(!window._fbReady) {
+    showSyncStatus('offline');
+    showToast('⚠ Firebase unavailable');
+    renderAll();
+    return;
+  }
+
+  await fetchAndRender();
+  setupRealtimeListeners();
+}
+
+async function fetchAndRender(retries) {
+  retries = retries || 0;
+  try {
+    var results = await Promise.all([
+      window._fbGet('entries'),
+      window._fbGet('clinics'),
+      window._fbGet('pricelist'),
+      window._fbGet('labinfo'),
+      window._fbGet('payments'),
+    ]);
+    var fbEntries=results[0], fbClinics=results[1], fbPriceList=results[2],
+        fbLabInfo=results[3], fbPayments=results[4];
+
+    if(fbEntries) {
+      entries = Object.values(fbEntries).map(function(e){ return Object.assign({},e,{id:Number(e.id)||e.id}); });
+      entries.sort(function(a,b){ return (b.date||''). localeCompare(a.date||'')||Number(b.id)-Number(a.id); });
+      localStorage.setItem('dentalEntries', JSON.stringify(entries));
+    }
+    if(fbClinics) {
+      clinics = Object.values(fbClinics);
+      localStorage.setItem('dentalClinics', JSON.stringify(clinics));
+    }
+    if(fbPriceList) {
+      priceList = Object.values(fbPriceList);
+      localStorage.setItem("dentalPriceList", JSON.stringify(priceList));
+    }
+    if(fbLabInfo) {
+      Object.assign(labInfo, fbLabInfo);
+      localStorage.setItem('dentalLabInfo', JSON.stringify(labInfo));
+    }
+    if(fbPayments) {
+      Object.entries(fbPayments).forEach(function(kv){ localStorage.setItem('paid_'+kv[0], kv[1]); });
+    }
+    renderAll();
+    populateDropdowns('d');
+    populateDropdowns('m');
+    showSyncStatus('ok');
+    console.log('Data loaded — entries:', entries.length);
+  } catch(e) {
+    console.error('fetchAndRender failed:', e);
+    if(retries < 3) {
+      // Retry after 2 seconds
+      showToast('⚠ Retrying... (' + (retries+1) + '/3)');
+      setTimeout(function(){ fetchAndRender(retries+1); }, 2000);
+    } else {
+      showSyncStatus('offline');
+      showToast('⚠ Load failed: ' + e.message.slice(0,40));
+      renderAll();
+    }
+  }
+}
+
+function setupRealtimeListeners() {
+  if(!window._fbReady) { setTimeout(setupRealtimeListeners, 200); return; }
+
+  // Entries — try onValue, fallback to polling every 10s
+  try {
+    window._fbOn('entries', function(data) {
+      if(!data) return;
+      entries = Object.values(data).map(function(e){ return Object.assign({},e,{id:Number(e.id)||e.id}); });
+      entries.sort(function(a,b){ return (b.date||''). localeCompare(a.date||'')||Number(b.id)-Number(a.id); });
+      localStorage.setItem('dentalEntries', JSON.stringify(entries));
+      renderRecordTable('d'); renderRecordTable('m');
+      renderMobRecent(); renderDeskRecent();
+      renderVoucherList();
+      showSyncStatus('ok');
+    });
+    window._fbOn('clinics', function(data) {
+      if(!data) return;
+      clinics = Object.values(data);
+      localStorage.setItem('dentalClinics', JSON.stringify(clinics));
+      renderClinicTable(); populateDropdowns('d'); populateDropdowns('m');
+    });
+    window._fbOn('payments', function(data) {
+      if(!data) return;
+      Object.entries(data).forEach(function(kv){ localStorage.setItem('paid_'+kv[0], kv[1]); });
+      renderRecordTable('d'); renderRecordTable('m');
+      renderVoucherList();
+    });
+  } catch(e) {
+    console.warn('onValue failed, using polling:', e);
+  }
+
+  // Poll every 30s as backup for browsers where onValue doesn't work
+  setInterval(function() {
+    window._fbGet('entries').then(function(data) {
+      if(!data) return;
+      var fresh = Object.values(data).map(function(e){ return Object.assign({},e,{id:Number(e.id)||e.id}); });
+      fresh.sort(function(a,b){ return (b.date||'').localeCompare(a.date||'')||Number(b.id)-Number(a.id); });
+      if(JSON.stringify(fresh) !== JSON.stringify(entries)) {
+        entries = fresh;
+        localStorage.setItem('dentalEntries', JSON.stringify(entries));
+        renderRecordTable('d'); renderRecordTable('m');
+        renderMobRecent(); renderDeskRecent();
+        renderVoucherList();
+      }
+    }).catch(function(){});
+  }, 5000);
+}
+
+function setupRealtimeListeners() {
+  if(!window._fbReady) { setTimeout(setupRealtimeListeners, 200); return; }
+
+  var initialLoad = true;
+  var initialTimer = setTimeout(function() {
+    // onValue didn't fire in 3 seconds — use get() as fallback
+    if(initialLoad) {
+      console.log('onValue timeout — using get() fallback');
+      initialLoad = false;
+      Promise.all([
+        window._fbGet('entries'),
+        window._fbGet('clinics'),
+        window._fbGet('pricelist'),
+        window._fbGet('labinfo'),
+        window._fbGet('payments'),
+      ]).then(function(results) {
+        var fbEntries=results[0], fbClinics=results[1], fbPriceList=results[2],
+            fbLabInfo=results[3], fbPayments=results[4];
+        if(fbEntries) {
+          entries = Object.values(fbEntries).map(function(e){ return Object.assign({},e,{id:Number(e.id)||e.id}); });
+          entries.sort(function(a,b){ return (b.date||''). localeCompare(a.date||'')||Number(b.id)-Number(a.id); });
+          localStorage.setItem('dentalEntries', JSON.stringify(entries));
+        }
+        if(fbClinics) { clinics = Object.values(fbClinics); localStorage.setItem('dentalClinics', JSON.stringify(clinics)); }
+        if(fbPriceList) {
+          priceList = Object.values(fbPriceList);
+          
+          localStorage.setItem('dentalPriceList', JSON.stringify(priceList));
+        }
+        if(fbLabInfo) { Object.assign(labInfo, fbLabInfo); localStorage.setItem('dentalLabInfo', JSON.stringify(labInfo)); }
+        if(fbPayments) { Object.entries(fbPayments).forEach(function(kv){ localStorage.setItem('paid_'+kv[0], kv[1]); }); }
+        renderAll();
+        showSyncStatus('ok');
+        showToast('✓ Data loaded');
+      }).catch(function(e) {
+        showSyncStatus('offline');
+        showToast('⚠ ' + e.message.slice(0,40));
+      });
+    }
+  }, 3000);
+
+  // Entries listener
+  window._fbOn('entries', function(data) {
+    if(data) {
+      entries = Object.values(data).map(function(e){ return Object.assign({},e,{id:Number(e.id)||e.id}); });
+      entries.sort(function(a,b){ return (b.date||''). localeCompare(a.date||'')||Number(b.id)-Number(a.id); });
+      localStorage.setItem('dentalEntries', JSON.stringify(entries));
+    }
+    if(initialLoad) {
+      clearTimeout(initialTimer);
+      initialLoad = false;
+      renderAll();
+      showSyncStatus('ok');
+    } else {
+      renderRecordTable('d'); renderRecordTable('m');
+      renderMobRecent(); renderDeskRecent();
+      renderVoucherList();
+    }
+  });
+
+  // Clinics listener
+  window._fbOn('clinics', function(data) {
+    if(!data) return;
+    clinics = Object.values(data);
+    localStorage.setItem('dentalClinics', JSON.stringify(clinics));
+    renderClinicTable(); populateDropdowns('d'); populateDropdowns('m');
+  });
+
+  // Pricelist listener
+  window._fbOn('pricelist', function(data) {
+    if(!data) return;
+    priceList = Object.values(data);
+    
+    localStorage.setItem('dentalPriceList', JSON.stringify(priceList));
+    renderPriceTable();
+  });
+
+  // Labinfo listener
+  window._fbOn('labinfo', function(data) {
+    if(!data) return;
+    Object.assign(labInfo, data);
+    localStorage.setItem('dentalLabInfo', JSON.stringify(labInfo));
+    loadLabInfo();
+  });
+
+  // Payments listener
+  window._fbOn('payments', function(data) {
+    if(!data) return;
+    Object.entries(data).forEach(function(kv){ localStorage.setItem('paid_'+kv[0], kv[1]); });
+    renderRecordTable('d'); renderRecordTable('m');
+    renderVoucherList();
+  });
+}
+
+function renderAll() {
+  renderRecordTable('d'); renderRecordTable('m');
+  renderClinicTable(); renderPriceTable();
+  populateDropdowns('d'); populateDropdowns('m');
+  renderMobRecent(); renderDeskRecent();
+  loadLabInfo();
+  renderMonthLabel('d'); renderMonthLabel('m');
+  voucherMonth = todayStr.slice(0,7);
+  renderVoucherMonth();
+  renderVoucherList();
+}
+
+
+function showSyncStatus(state) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  if (state === 'syncing') { el.textContent = '⟳ Syncing...'; el.style.color = '#f59e0b'; }
+  else if (state === 'ok')  { el.textContent = '✓ Live';       el.style.color = '#16a34a'; setTimeout(function(){ el.textContent='🔴 Live'; el.style.color='#16a34a'; }, 2000); }
+  else                      { el.textContent = '⚠ Offline';    el.style.color = '#dc2626'; }
+}
+function persistAll(){
+  localStorage.setItem('dentalClinics',JSON.stringify(clinics));
+  localStorage.setItem('dentalPriceList',JSON.stringify(priceList));
+  syncToCloud();
+}
+function esc(str){return (str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+let toastTimer;
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2500);}
+
+// ══ VOUCHER ══
+let voucherMonth = todayStr.slice(0,7);
+let invoiceCounter = parseInt(localStorage.getItem('invoiceCounter')||'1000');
+let invoiceYear    = parseInt(localStorage.getItem('invoiceYear')||new Date().getFullYear());
+
+// Fixed payment info
+const PAYMENT_INFO = {
+  bank: 'KBZ Special',
+  accountNo: '33551103600530601',
+  accountName: 'Nang Moh Moh Wah',
+  kpayNo: '09-267150449',
+  kpayName: 'Nang Moh Moh Wah',
+  viber: '09267150449',
+  comments: 'Payment screen shoot များကို\nViber no -09267150449 သို့ ပို့ပေးနိုင်ပါသည် ။'
+};
+
+function initVoucher() {
+  renderVoucherMonth();
+  renderVoucherList();
+}
+
+function changeVoucherMonth(dir) {
+  const [y,m] = voucherMonth.split('-').map(Number);
+  const d = new Date(y, m-1+dir, 1);
+  voucherMonth = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  renderVoucherMonth();
+  renderVoucherList();
+}
+
+function renderVoucherMonth() {
+  const [y,m] = voucherMonth.split('-').map(Number);
+  const label = new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const el1 = document.getElementById('mob-voucher-month');
+  const el2 = document.getElementById('desk-voucher-month');
+  if(el1) el1.textContent = label;
+  if(el2) el2.textContent = label;
+}
+
+function getVoucherDoctors() {
+  // Group entries by doctor/clinic for the current voucherMonth
+  const monthEntries = entries
+    .filter(e => e.date && e.date.trim().startsWith(voucherMonth))
+    .sort((a,b) => (b.date||'').localeCompare(a.date||'')||Number(b.id)-Number(a.id));
+
+  // First pass: group by doctor+clinic
+  const map = {};
+  monthEntries.forEach(e => {
+    const key = (e.doctorName||'Unknown')+'||'+(e.clinicName||'');
+    if(!map[key]) map[key] = { doctor: e.doctorName||'Unknown', clinic: e.clinicName||'', entries: [] };
+    map[key].entries.push(e);
+  });
+
+  // Second pass: for each doctor, split into paid batches + one unpaid batch
+  // A paid batch = entries whose paid_id is '1' AND belong to a paid voucher
+  // Strategy: build voucher list, then check if voucher is paid.
+  // If paid, those entries are locked. Any entry NOT in a paid batch → new unpaid voucher.
+  const rawGroups = Object.values(map);
+  const result = [];
+
+  rawGroups.forEach(function(g) {
+    // Find all paid voucher indices for this doctor in this month
+    // We stored paid entries individually via paid_${entry.id}
+    const paidEntries   = g.entries.filter(e => localStorage.getItem('paid_'+e.id) === '1');
+    const unpaidEntries = g.entries.filter(e => localStorage.getItem('paid_'+e.id) !== '1');
+
+    // Group paid entries into batches by their voucher payment timestamp
+    // Use vpaid batch keys: scan existing vouchers in result to find paid ones
+    // Simpler: group paid entries together as one or more paid vouchers
+    // We know a voucher was paid if ALL its entries are paid_=1 AND vKey='1'
+    // Since entries get paid together, all paid entries for this doctor = 1 batch (or multiple if re-paid)
+    if (paidEntries.length > 0) {
+      result.push({ doctor: g.doctor, clinic: g.clinic, entries: paidEntries, forcePaid: true });
+    }
+    if (unpaidEntries.length > 0) {
+      result.push({ doctor: g.doctor, clinic: g.clinic, entries: unpaidEntries, forcePaid: false });
+    }
+  });
+
+  return result;
+}
+
+
+function getUnitPrice(caseType, entry) {
+  // Use stored price from entry if available (preserves historical prices)
+  if(entry && entry.unitPrice && parseFloat(entry.unitPrice) > 0) return parseFloat(entry.unitPrice);
+  const p = priceList.find(p => p.item === caseType);
+  return p ? parseFloat(p.price)||0 : 0;
+}
+
+function calcVoucherTotal(doctorEntries, discount) {
+  const sub = doctorEntries.reduce((sum, e) => {
+    const qty = parseFloat(e.quantity)||1;
+    const up  = getUnitPrice(e.caseType, e);
+    return sum + (qty * up);
+  }, 0);
+  return { sub, discount: discount||0, total: sub - (discount||0) };
+}
+
+function renderVoucherList() {
+  const doctors = getVoucherDoctors();
+  const mobEl  = document.getElementById('mob-voucher-list');
+  const deskEl = document.getElementById('desk-voucher-list');
+
+  if(!doctors.length) {
+    const empty = '<div class="voucher-empty">No records found for this month.<br>Add cases in Daily Record first.</div>';
+    if(mobEl)  mobEl.innerHTML  = empty;
+    if(deskEl) deskEl.innerHTML = empty;
+    return;
+  }
+
+
+  const yr2digit = parseInt(voucherMonth.slice(2,4));
+  const fullYear = parseInt("20"+String(yr2digit).padStart(2,"0"));
+  if(fullYear > invoiceYear) {
+    invoiceCounter = 1000;
+    invoiceYear = fullYear;
+    localStorage.setItem("invoiceYear", invoiceYear);
+  }
+
+  const html = doctors.map((d, i) => {
+    const {sub} = calcVoucherTotal(d.entries, 0);
+    const cases = d.entries.length;
+    const isPaid = d.forcePaid;
+    // Get voucherNo directly from entries
+    const invNo = d.entries[0]?.voucherNo || '—';
+        const paidBadge = isPaid ? '<span class="vli-paid-badge">✓ PAID</span>' : '';
+        const paidBtn = isPaid
+          ? `<button class="vli-paid-btn unpaid-btn" onclick="event.stopPropagation();triggerUnpaid(${i})">Mark Unpaid</button>`
+          : `<button class="vli-paid-btn" onclick="event.stopPropagation();triggerPaid(${i})">Mark Paid</button>`;
+        return `<div class="voucher-list-item${isPaid?' vli-paid-item':''}" onclick="openVoucher(${i})">
+          <div class="vli-left">
+            <div class="vli-doctor">🧾 ${esc(d.doctor)} ${paidBadge}</div>
+            <div class="vli-clinic">${esc(d.clinic)} · ${cases} case${cases!==1?'s':''} · <span style="color:#16a34a;font-family:'DM Mono',monospace;font-size:0.7rem;">No. ${invNo}</span></div>
+          </div>
+          <div class="vli-right">
+            <div class="vli-total">${fmtNum(sub)} MMK</div>
+            ${paidBtn}
+          </div>
+        </div>`;
+  }).join('');
+  if(mobEl)  mobEl.innerHTML  = html;
+  if(deskEl) deskEl.innerHTML = html;
+}
+
+function triggerPaid(idx) {
+  if(!confirm) { // confirm is blocked, use showConfirm
+  }
+  showConfirm(
+    'Mark as Paid?',
+    'This will mark all entries in this voucher as PAID and lock them from editing.',
+    function() {
+      const doctors = getVoucherDoctors();
+      const d = doctors[idx];
+      if(!d) return;
+      d.entries.forEach(e => { localStorage.setItem('paid_'+e.id, '1'); fbSavePayment(e.id, '1'); });
+      renderVoucherList();
+      renderRecordTable('d');
+      renderRecordTable('m');
+      showToast('✓ Voucher marked as Paid');
+    }
+  );
+}
+
+function triggerUnpaid(idx) {
+  showConfirm(
+    'Mark as Unpaid?',
+    'This will mark this voucher as UNPAID and unlock entries for editing.',
+    function() {
+      const doctors = getVoucherDoctors();
+      const d = doctors[idx];
+      if(!d) return;
+      d.entries.forEach(e => { localStorage.setItem('paid_'+e.id, '0'); fbSavePayment(e.id, '0'); });
+      renderVoucherList();
+      renderRecordTable('d');
+      renderRecordTable('m');
+      showToast('↩ Voucher marked as Unpaid');
+    }
+  );
+}
+
+function confirmVoucherPaid(vKey, idx) { triggerPaid(idx); }
+function confirmUnpaid(vKey, idx) { triggerUnpaid(idx); }
+
+window._confirmCb = null;
+function showConfirm(title, msg, cb) {
+  window._confirmCb = cb;
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-msg').textContent = msg;
+  document.getElementById('confirm-modal').style.display = 'flex';
+}
+function closeConfirm() {
+  document.getElementById('confirm-modal').style.display = 'none';
+  window._confirmCb = null;
+}
+function doConfirm() {
+  const cb = window._confirmCb;
+  closeConfirm();
+  if(cb) cb();
+}
+
+
+
+
+function openVoucher(idx) {
+  try {
+  const doctors = getVoucherDoctors();
+  const d = doctors[idx];
+  if(!d || !d.entries || !d.entries.length) return;
+
+  const invNo = (d.entries[0] && d.entries[0].voucherNo) ? d.entries[0].voucherNo : '—';
+  const invKey = 'inv_voucher_'+voucherMonth+'_'+idx;
+
+  const [y,m] = voucherMonth.split('-').map(Number);
+  const nextM = m === 12 ? 1 : m + 1;
+  const nextY = m === 12 ? y + 1 : y;
+  const dueDateISO = `${nextY}-${String(nextM).padStart(2,'0')}-15`;
+  const invDateISO = new Date().toISOString().slice(0,10);
+  const invDate = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'numeric',year:'numeric'});
+
+  const dueDateKey = 'due_'+invKey;
+  const savedDueISO = localStorage.getItem(dueDateKey) || dueDateISO;
+
+  const discKey = 'disc_'+invKey;
+  const savedDisc = parseFloat(localStorage.getItem(discKey)||'0');
+
+  const vKey = 'vpaid_'+voucherMonth+'_'+idx;
+  const isPaid = d.forcePaid;
+
+  const html = buildVoucherHTML(d, invNo, invDate, savedDueISO, savedDisc, discKey, dueDateKey, isPaid, vKey, idx);
+
+  const mobContent  = document.getElementById('mob-voucher-content');
+  const deskContent = document.getElementById('desk-voucher-content');
+  if(mobContent)  { mobContent.innerHTML  = html; document.getElementById('mob-voucher-view').classList.add('active'); }
+  if(deskContent) { deskContent.innerHTML = html; document.getElementById('voucher-view-modal').classList.add('open'); }
+  } catch(err) { showToast('⚠ Error: '+err.message); console.error('openVoucher error:', err); }
+}
+
+function buildVoucherHTML(d, invNo, invDate, dueDateISO, discount, discKey, dueDateKey, isPaid, vKey, vIdx) {
+  const {sub, total} = calcVoucherTotal(d.entries, discount);
+  const rows = d.entries.map((e,i) => {
+    const qty = parseFloat(e.quantity)||1;
+    const up  = getUnitPrice(e.caseType, e);
+    const tot = qty * up;
+    return `<tr>
+      <td>${e.date||'—'}</td>
+      <td>${esc(e.caseType)||'—'}</td>
+      <td style="text-align:center;">${esc(e.teethNo)||'—'}</td>
+      <td style="text-align:center;">${qty}</td>
+      <td style="text-align:right;">${fmtNum(up)}</td>
+      <td style="text-align:right;">${fmtNum(tot)}</td>
+      <td style="font-size:0.75rem;color:#555;">${[e.patientName, e.remark].filter(Boolean).map(v=>esc(v)).join('<br>')||'—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="voucher-doc" id="voucher-doc-inner">
+    <div class="voucher-doc-hdr">
+      <div class="vdoc-logo-area">
+        <div class="vdoc-logo-circle"><img src="${(document.getElementById('lab-logo-src')||{src:''}).src}" style="width:100px;height:100px;object-fit:contain;" alt="Dollar Dental Lab Logo"/></div>
+        <div class="vdoc-lab-name">Dollar</div>
+        <div class="vdoc-lab-sub">Dental Laboratory</div>
+      </div>
+      <div class="vdoc-addr">
+        🏡 အခန်းအမှတ် (၁၁၀)၊ မြေညီထပ်၊ ငြိမ်းချမ်းစံအိမ်ကွန်ဒို၊ မိုင်းလားမြို့။<br>
+        🏠 အမှတ် (၁၁)၊ စျေးတန်းကြီးလမ်း၊ စျေးတန်းကြီးရပ်၊ ကျိုင်းတုံမြို့။ (ဒေါ်လာစတိုး)<br>
+        ☎️ 09-250477914, 09-766096669
+      </div>
+    </div>
+    <div class="vdoc-bill-row">
+      <div class="vdoc-bill-to">
+        <div class="label">BILL TO:</div>
+        <div class="doctor-name">${esc(d.doctor)}</div>
+        <div class="clinic-name">${esc(d.clinic)}</div>
+      </div>
+      <div class="vdoc-invoice-info">
+        <table>
+          <tr><td>Invoice #:</td><td>${invNo}</td></tr>
+          <tr><td>Date</td><td>${invDate}</td></tr>
+          <tr><td>Due Date:</td><td>
+            <input type="date" value="${dueDateISO}"
+              style="border:1px solid #ddd;border-radius:4px;padding:2px 6px;font-size:0.82rem;color:#1a1a1a;"
+              onchange="saveDueDate('${dueDateKey}',this.value,this)"/>
+          </td></tr>
+        </table>
+      </div>
+    </div>
+    <table class="vdoc-items">
+      <thead><tr><th>Date</th><th>Case</th><th>Teeth No</th><th>Quantity</th><th>Unit Price</th><th>Total</th><th>Remark</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="vdoc-totals">
+      <table>
+        <tr><td>Subtotal</td><td>${fmtNum(sub)}</td></tr>
+        <tr><td>Discount</td><td>
+          <input class="discount-input" type="number" value="${discount}" placeholder="0"
+            onchange="updateDiscount('${discKey}',this.value,'${d.doctor.replace(/'/g,"\\'")}','${d.clinic.replace(/'/g,"\\'")}','${invNo}','${invDate}','${dueDateISO}')"/>
+        </td></tr>
+        <tr class="vdoc-total-row"><td><b>Total</b></td><td><b>${fmtNum(total)}</b></td></tr>
+      </table>
+    </div>
+    <div class="vdoc-footer">
+      <div class="vdoc-payment">
+        <h4>Payment Information</h4>
+        <table>
+          <tr><td colspan="2"><span class="vdoc-pay-section">${PAYMENT_INFO.bank}</span></td></tr>
+          <tr><td>Account No</td><td>${PAYMENT_INFO.accountNo}</td></tr>
+          <tr><td>Name</td><td>${PAYMENT_INFO.accountName}</td></tr>
+          <tr><td colspan="2"><span class="vdoc-pay-section">Kpay</span></td></tr>
+          <tr><td>No</td><td>${PAYMENT_INFO.kpayNo}</td></tr>
+          <tr><td>Name</td><td>${PAYMENT_INFO.kpayName}</td></tr>
+        </table>
+      </div>
+      <div class="vdoc-comments">
+        <h4>Comments</h4>
+        <div>${PAYMENT_INFO.comments.replace(/\n/g,'<br>')}</div>
+        <div class="vdoc-thankyou">Thank you for your trust!</div>
+      </div>
+    </div>
+    ${isPaid ? '<div class="vdoc-paid-stamp">PAID</div>' : ''}
+    <div class="vdoc-paid-action no-print" style="margin-top:18px;text-align:center;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      ${isPaid
+        ? `<button class="vdoc-paid-btn unpaid" onclick="triggerUnpaid(${vIdx})">↩ Mark as Unpaid</button>`
+        : `<button class="vdoc-paid-btn" onclick="triggerPaid(${vIdx})">✓ Mark as Paid</button>`
+      }
+      <button class="vdoc-paid-btn" style="background:#1a3324;color:#7ecf9a;border:1px solid #2e5c3e;" onclick="downloadVoucherPDF('${esc(d.doctor)}','${voucherMonth}')">⬇ Download PDF</button>
+    </div>
+  </div>`;
+}
+
+function updateDiscount(discKey, val, doctor, clinic, invNo, invDate, dueDate) {
+  const discount = parseFloat(val)||0;
+  localStorage.setItem(discKey, discount);
+  // Rebuild totals section only
+  const doctors = getVoucherDoctors();
+  const d = doctors.find(d => d.doctor===doctor && d.clinic===clinic);
+  if(!d) return;
+  const {sub, total} = calcVoucherTotal(d.entries, discount);
+  // Update total display
+  const totals = document.querySelectorAll('.vdoc-total-row td b');
+  if(totals.length >= 2) totals[1].textContent = fmtNum(total);
+}
+
+function closeVoucherView() {
+  document.getElementById('voucher-view-modal').classList.remove('open');
+}
+
+function downloadVoucherPDF(doctorName, month) {
+  const inner = document.getElementById('voucher-doc-inner')
+    || document.querySelector('#mob-voucher-content .voucher-doc')
+    || document.querySelector('#desk-voucher-content .voucher-doc');
+  if(!inner) { showToast('⚠ Open a voucher first'); return; }
+
+  const [y, m2] = month.split('-').map(Number);
+  const monthName = new Date(y, m2-1, 1).toLocaleDateString('en-GB', {month:'long'});
+  const filename = (doctorName||'Dollar Dental Lab').replace(/\s+/g,'_') + '_' + monthName + '_' + y;
+
+  // Put voucher in print area
+  const printArea = document.getElementById('print-area');
+  const clone = inner.cloneNode(true);
+  clone.querySelectorAll('.no-print, .vdoc-paid-action').forEach(el => el.remove());
+  // Remove due date input (show as text)
+  clone.querySelectorAll('input[type=date]').forEach(function(inp) {
+    const span = document.createElement('span');
+    span.textContent = inp.value;
+    inp.parentNode.replaceChild(span, inp);
+  });
+  printArea.innerHTML = '';
+  printArea.appendChild(clone);
+
+  // Set title for PDF filename
+  const origTitle = document.title;
+  document.title = filename;
+
+  window.print();
+
+  setTimeout(function() {
+    document.title = origTitle;
+    printArea.innerHTML = '';
+  }, 3000);
+}
+
+function printVoucher() {
+  downloadVoucherPDF('Voucher', voucherMonth);
+}
+function openMobReport(type) {
+  document.getElementById('mob-report-' + type).classList.add('active');
+  renderReport(type, 'mob-' + type + '-content');
+}
+function closeMobReport(type) {
+  document.getElementById('mob-report-' + type).classList.remove('active');
+}
+function openDeskReport(type) {
+  document.getElementById('desk-report-menu').style.display = 'none';
+  document.getElementById('desk-report-view').style.display = 'block';
+  var titles = { ledger: 'Ledger', monthly: 'Monthly Report', yearly: 'Yearly Report', percent: 'Percentage Calculation' };
+  document.getElementById('desk-report-view-title').textContent = titles[type];
+  renderReport(type, 'desk-report-view-content');
+}
+function closeDeskReport() {
+  document.getElementById('desk-report-menu').style.display = 'block';
+  document.getElementById('desk-report-view').style.display = 'none';
+}
+
+var rptMonthIdx = 0; // 0 = current month
+var rptYearIdx = 0;  // 0 = current year
+
+function renderReport(type, containerId) {
+  var c = document.getElementById(containerId);
+  if (!c) return;
+  if (type === 'ledger') c.innerHTML = buildLedgerHTML();
+  else if (type === 'monthly') {
+    c.innerHTML = buildMonthlyHTML(rptMonthIdx);
+  }
+  else if (type === 'yearly') {
+    c.innerHTML = buildYearlyHTML(rptYearIdx);
+  }
+  else if (type === 'percent') c.innerHTML = buildPercentHTML(rptYearIdx);
+}
+
+function buildLedgerHTML() {
+  // Collect unique filter options
+  var allClinics = [...new Set(entries.map(e=>e.clinicName||'').filter(Boolean))].sort();
+  var allDoctors = [...new Set(entries.map(e=>e.doctorName||'').filter(Boolean))].sort();
+  var allCases   = [...new Set(entries.map(e=>e.caseType||'').filter(Boolean))].sort();
+
+  var lf = window._ledgerFilters || { dateFrom:'', dateTo:'', clinic:'', doctor:'', caseType:'', paid:'' };
+
+  var filters = '<div class="ldg-filter-bar">'
+    + '<div class="ldg-date-range">'
+    + '<label class="ldg-date-label">From</label>'
+    + '<input type="date" class="ldg-date-inp" value="'+lf.dateFrom+'" onchange="window._ledgerFilters=window._ledgerFilters||{};window._ledgerFilters.dateFrom=this.value;refreshLedger()">'
+    + '<label class="ldg-date-label">To</label>'
+    + '<input type="date" class="ldg-date-inp" value="'+lf.dateTo+'" onchange="window._ledgerFilters=window._ledgerFilters||{};window._ledgerFilters.dateTo=this.value;refreshLedger()">'
+    + '</div>'
+    + '<select class="ldg-sel" onchange="window._ledgerFilters=window._ledgerFilters||{};window._ledgerFilters.clinic=this.value;refreshLedger()"><option value="">All Clinics</option>' + allClinics.map(v=>'<option value="'+esc(v)+'"'+(lf.clinic===v?' selected':'')+'>'+esc(v)+'</option>').join('') + '</select>'
+    + '<select class="ldg-sel" onchange="window._ledgerFilters=window._ledgerFilters||{};window._ledgerFilters.doctor=this.value;refreshLedger()"><option value="">All Doctors</option>' + allDoctors.map(v=>'<option value="'+esc(v)+'"'+(lf.doctor===v?' selected':'')+'>'+esc(v)+'</option>').join('') + '</select>'
+    + '<select class="ldg-sel" onchange="window._ledgerFilters=window._ledgerFilters||{};window._ledgerFilters.caseType=this.value;refreshLedger()"><option value="">All Cases</option>' + allCases.map(v=>'<option value="'+esc(v)+'"'+(lf.caseType===v?' selected':'')+'>'+esc(v)+'</option>').join('') + '</select>'
+    + '<select class="ldg-sel" onchange="window._ledgerFilters=window._ledgerFilters||{};window._ledgerFilters.paid=this.value;refreshLedger()"><option value="">All Status</option><option value="paid"'+(lf.paid==='paid'?' selected':'')+'>Paid</option><option value="unpaid"'+(lf.paid==='unpaid'?' selected':'')+'>Unpaid</option></select>'
+    + '<button class="ldg-reset" onclick="window._ledgerFilters={};refreshLedger()">Reset</button>'
+    + '</div>';
+
+  // Apply filters
+  var sorted = entries.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')||Number(b.id)-Number(a.id));
+  if (lf.dateFrom)   sorted = sorted.filter(e=>(e.date||'') >= lf.dateFrom);
+  if (lf.dateTo)     sorted = sorted.filter(e=>(e.date||'') <= lf.dateTo);
+  if (lf.clinic)     sorted = sorted.filter(e=>e.clinicName===lf.clinic);
+  if (lf.doctor)     sorted = sorted.filter(e=>e.doctorName===lf.doctor);
+  if (lf.caseType)   sorted = sorted.filter(e=>e.caseType===lf.caseType);
+  if (lf.paid==='paid')   sorted = sorted.filter(e=>localStorage.getItem('paid_'+e.id)==='1');
+  if (lf.paid==='unpaid') sorted = sorted.filter(e=>localStorage.getItem('paid_'+e.id)!=='1');
+
+  if (!sorted.length) return filters + '<div style="color:var(--muted);text-align:center;padding:40px;">No entries match the filter.</div>';
+
+  var grandTotal = 0;
+  var paidTotal = 0;
+  var unpaidTotal = 0;
+
+  var rows = sorted.map(function(e) {
+    var up  = getUnitPrice(e.caseType, e);
+    var qty = parseFloat(e.quantity)||1;
+    var t   = up * qty;
+    var isPaid = localStorage.getItem('paid_'+e.id)==='1';
+    grandTotal  += t;
+    if (isPaid) paidTotal += t; else unpaidTotal += t;
+    var badge = isPaid
+      ? '<button class="ldg-badge paid" onclick="togglePaid(\''+e.id+'\')">Paid</button>'
+      : '<button class="ldg-badge unpaid" onclick="togglePaid(\''+e.id+'\')">Unpaid</button>';
+    return '<tr>'
+      + '<td>'+(e.date||'—')+'</td>'
+      + '<td>'+esc(e.clinicName||'—')+'</td>'
+      + '<td>'+esc(e.doctorName||'—')+'</td>'
+      + '<td>'+esc(e.caseType||'—')+'</td>'
+      + '<td>'+esc(e.teethNo||'—')+'</td>'
+      + '<td style="text-align:center">'+qty+'</td>'
+      + '<td style="text-align:right">'+fmtNum(up)+'</td>'
+      + '<td style="text-align:right">'+fmtNum(t)+'</td>'
+      + '<td style="text-align:center">'+badge+'</td>'
+      + '</tr>';
+  }).join('');
+
+  var summary = '<div class="ldg-summary">'
+    + '<span>Total: <b style="color:var(--text)">'+fmtNum(grandTotal)+'</b></span>'
+    + '<span style="color:#4ade80">Paid: <b>'+fmtNum(paidTotal)+'</b></span>'
+    + '<span style="color:#f87171">Unpaid: <b>'+fmtNum(unpaidTotal)+'</b></span>'
+    + '</div>';
+
+  return filters
+    + summary
+    + '<div style="overflow-x:auto;"><table class="rpt-table">'
+    + '<thead><tr><th>Date</th><th>Clinic</th><th>Doctor</th><th>Case</th><th>Teeth No</th><th>Qty</th><th>Unit Price</th><th>Total</th><th>Status</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '<tfoot><tr class="rpt-total-row"><td colspan="7">Grand Total</td><td style="text-align:right">'+fmtNum(grandTotal)+'</td><td></td></tr></tfoot>'
+    + '</table></div>';
+}
+
+function togglePaid(id) {
+  var key = 'paid_'+id;
+  var cur = localStorage.getItem(key)==='1';
+  localStorage.setItem(key, cur?'0':'1');
+  refreshLedger();
+}
+
+function refreshLedger() {
+  // find whichever ledger container is visible
+  var c = document.getElementById('mob-ledger-content') || document.getElementById('desk-report-view-content');
+  // try mob first, then desk
+  var mob = document.getElementById('mob-ledger-content');
+  var dsk = document.getElementById('desk-report-view-content');
+  if (mob && mob.closest('.mob-page') && mob.closest('.mob-page').classList.contains('active')) {
+    mob.innerHTML = buildLedgerHTML();
+  } else if (dsk && document.getElementById('desk-report-view') && document.getElementById('desk-report-view').style.display !== 'none') {
+    dsk.innerHTML = buildLedgerHTML();
+  }
+}
+
+
+function buildMonthlyHTML(offset) {
+  var now2 = new Date();
+  var d = new Date(now2.getFullYear(), now2.getMonth()+offset, 1);
+  var key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  var label = d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  var filtered = entries.filter(function(e){ return e.date && e.date.startsWith(key); });
+
+  var nav = '<div class="rpt-nav">'
+    +'<button onclick="rptMonthIdx--;renderReport(\'monthly\',\'mob-monthly-content\');renderReport(\'monthly\',\'desk-report-view-content\');">‹</button>'
+    +'<span class="rpt-label">'+label+'</span>'
+    +'<button onclick="rptMonthIdx++;renderReport(\'monthly\',\'mob-monthly-content\');renderReport(\'monthly\',\'desk-report-view-content\');">›</button>'
+    +'</div>';
+
+  if(!filtered.length) return nav+'<div style="color:var(--muted);text-align:center;padding:30px;">No records for this month.</div>';
+
+  var COLORS = ['#16a34a','#2563eb','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d'];
+
+  var fixedItems    = filtered.filter(function(e){ var p=priceList.find(function(p){return p.item===e.caseType;}); return !p||(p.category||'fixed')==='fixed'; });
+  var removableItems= filtered.filter(function(e){ var p=priceList.find(function(p){return p.item===e.caseType;}); return p&&p.category==='removable'; });
+
+  function buildSection(items, catLabel, icon) {
+    if(!items.length) return '';
+    var caseMap = {}, feeMap = {};
+    items.forEach(function(e){
+      var ct = e.caseType||'Unknown';
+      var qty = parseFloat(e.quantity)||1;
+      var fee = getUnitPrice(e.caseType, e) * qty;
+      caseMap[ct] = (caseMap[ct]||0) + qty;
+      feeMap[ct]  = (feeMap[ct]||0) + fee;
+    });
+    var caseKeys = Object.keys(caseMap).sort(function(a,b){return caseMap[b]-caseMap[a];});
+    var maxUnits = Math.max.apply(null, caseKeys.map(function(k){return caseMap[k];}));
+    var subUnits = caseKeys.reduce(function(s,k){return s+caseMap[k];},0);
+    var subFees  = caseKeys.reduce(function(s,k){return s+feeMap[k];},0);
+
+    var rows = caseKeys.map(function(k,i){
+      var pct = Math.round(caseMap[k]/maxUnits*100);
+      var color = COLORS[i%COLORS.length];
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+        +'<div style="width:160px;font-size:0.73rem;color:var(--text);flex-shrink:0;">'+k+'</div>'
+        +'<div style="flex:1;position:relative;background:#f0f4f8;border-radius:5px;height:26px;">'
+        +'<div style="position:absolute;left:0;top:0;width:'+Math.max(40,pct)+'%;background:'+color+';height:100%;border-radius:5px;"></div>'
+        +'<div style="position:absolute;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;padding:0 10px;gap:12px;">'
+        +'<span style="font-size:0.7rem;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5);white-space:nowrap;">'+caseMap[k]+' units</span>'
+        +'<span style="font-size:0.7rem;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5);white-space:nowrap;">'+fmtNum(feeMap[k])+' MMK</span>'
+        +'</div>'
+        +'</div></div>';
+    }).join('');
+
+    return '<div style="background:#e8f5ee;padding:8px 16px;border-bottom:1px solid #bbddd0;border-top:1px solid #e2e8f0;">'
+      +'<span style="color:#16a34a;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;">'+icon+' '+catLabel+'</span>'
+      +'</div>'
+      +'<div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;">'+rows+'</div>'
+      +'<div style="background:#f0fdf4;padding:9px 16px;display:flex;justify-content:space-between;align-items:center;">'
+      +'<span style="font-size:0.75rem;font-weight:700;color:#16a34a;">'+catLabel+' Subtotal</span>'
+      +'<span style="font-size:0.75rem;font-weight:700;color:#16a34a;">'+subUnits+' units &nbsp;|&nbsp; '+fmtNum(subFees)+' MMK</span>'
+      +'</div>';
+  }
+
+  // Income by clinic
+  var clinicIncomeMap = {};
+  filtered.forEach(function(e){ var cl=e.clinicName||'Unknown'; clinicIncomeMap[cl]=(clinicIncomeMap[cl]||0)+getUnitPrice(e.caseType, e)*(parseFloat(e.quantity)||1); });
+  var clinicIncomeKeys = Object.keys(clinicIncomeMap).sort(function(a,b){return clinicIncomeMap[b]-clinicIncomeMap[a];});
+  var totalIncome = clinicIncomeKeys.reduce(function(s,k){return s+clinicIncomeMap[k];},0);
+  var totalUnits  = filtered.reduce(function(s,e){return s+(parseFloat(e.quantity)||1);},0);
+
+  var clinicRows = clinicIncomeKeys.map(function(k,i){
+    var pct = Math.round(clinicIncomeMap[k]/totalIncome*100);
+    return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+      +'<div style="width:160px;font-size:0.73rem;color:var(--text);flex-shrink:0;">'+k+'</div>'
+      +'<div style="flex:1;background:#f0f4f8;border-radius:5px;height:26px;overflow:hidden;">'
+      +'<div style="width:'+Math.max(10,pct)+'%;background:'+COLORS[i%COLORS.length]+';height:100%;border-radius:5px;display:flex;align-items:center;padding:0 10px;">'
+      +'<span style="font-size:0.7rem;color:#fff;font-weight:700;white-space:nowrap;">'+fmtNum(clinicIncomeMap[k])+' MMK</span>'
+      +'</div></div></div>';
+  }).join('');
+
+  var html = nav;
+  html += '<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:14px;">';
+  html += buildSection(fixedItems, 'Fixed', '🔩');
+  html += buildSection(removableItems, 'Removable', '🦷');
+  html += '<div style="background:#1a3324;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">'
+    +'<span style="font-size:0.8rem;font-weight:700;color:#fff;">TOTAL</span>'
+    +'<span style="font-size:0.85rem;font-weight:700;color:#4ade80;">'+totalUnits+' units &nbsp;|&nbsp; '+fmtNum(totalIncome)+' MMK</span>'
+    +'</div>';
+  html += '</div>';
+
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">'
+    +'<div style="font-size:0.83rem;font-weight:700;color:var(--green);margin-bottom:12px;">💰 Income by Clinic</div>'
+    +clinicRows
+    +'<div style="margin-top:8px;font-size:0.76rem;color:var(--muted);">Total: <b style="color:#16a34a;">'+fmtNum(totalIncome)+' MMK</b></div>'
+    +'</div>';
+
+  return html;
+}
+function buildYearlyHTML(offset) {
+  var yr = new Date().getFullYear() + (offset||0);
+  var allYearEntries = entries.filter(function(e){ return e.date && e.date.startsWith(String(yr)); });
+
+  if(typeof window.rptYearQuarter === 'undefined') window.rptYearQuarter = 0;
+  var q = window.rptYearQuarter;
+  var quarterMonths = { 1:[1,2,3], 2:[4,5,6], 3:[7,8,9], 4:[10,11,12] };
+  var filtered = q === 0 ? allYearEntries : allYearEntries.filter(function(e){
+    var mo = parseInt((e.date||'').slice(5,7));
+    return quarterMonths[q].indexOf(mo) !== -1;
+  });
+
+  var nav = '<div class="rpt-nav">'
+    +'<button onclick="rptYearIdx--;window.rptYearQuarter=0;renderReport(\'yearly\',\'mob-yearly-content\');renderReport(\'yearly\',\'desk-report-view-content\');">‹</button>'
+    +'<span class="rpt-label">'+yr+'</span>'
+    +'<button onclick="rptYearIdx++;window.rptYearQuarter=0;renderReport(\'yearly\',\'mob-yearly-content\');renderReport(\'yearly\',\'desk-report-view-content\');">›</button>'
+    +'</div>';
+
+  var quarters = [{label:'All',val:0},{label:'Q1',val:1,sub:'Jan–Mar'},{label:'Q2',val:2,sub:'Apr–Jun'},{label:'Q3',val:3,sub:'Jul–Sep'},{label:'Q4',val:4,sub:'Oct–Dec'}];
+  var qNav = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">'
+    +quarters.map(function(qt){
+      var active = (q===qt.val);
+      return '<button onclick="window.rptYearQuarter='+qt.val+';renderReport(\'yearly\',\'mob-yearly-content\');renderReport(\'yearly\',\'desk-report-view-content\');"'
+        +' style="flex:1;min-width:50px;padding:7px 4px;border-radius:8px;border:1px solid '+(active?'var(--green)':'var(--border)')+';'
+        +'background:'+(active?'#1a3324':'var(--surface)')+';color:'+(active?'var(--green)':'var(--muted)')+';'
+        +'font-size:0.8rem;font-weight:'+(active?'700':'400')+';cursor:pointer;text-align:center;">'
+        +'<div>'+qt.label+'</div>'
+        +(qt.sub?'<div style="font-size:0.65rem;opacity:0.7;">'+qt.sub+'</div>':'')
+        +'</button>';
+    }).join('')+'</div>';
+
+  var periodLabel = q===0 ? String(yr) : ('Q'+q+' '+yr);
+
+  if(!filtered.length) return nav+qNav+'<div style="color:var(--muted);text-align:center;padding:30px;">No entries for this period.</div>';
+
+  var COLORS = ['#16a34a','#2563eb','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d'];
+
+  // Fixed/Removable split
+  var fixedItems    = filtered.filter(function(e){ var p=priceList.find(function(p){return p.item===e.caseType;}); return !p||(p.category||'fixed')==='fixed'; });
+  var removableItems= filtered.filter(function(e){ var p=priceList.find(function(p){return p.item===e.caseType;}); return p&&p.category==='removable'; });
+
+  function buildSection(items, catLabel, icon) {
+    if(!items.length) return '';
+    var caseMap = {}, feeMap = {};
+    items.forEach(function(e){
+      var ct = e.caseType||'Unknown';
+      var qty = parseFloat(e.quantity)||1;
+      caseMap[ct] = (caseMap[ct]||0) + qty;
+      feeMap[ct]  = (feeMap[ct]||0) + getUnitPrice(e.caseType, e)*qty;
+    });
+    var caseKeys = Object.keys(caseMap).sort(function(a,b){return caseMap[b]-caseMap[a];});
+    var maxUnits = Math.max.apply(null, caseKeys.map(function(k){return caseMap[k];}));
+    var subUnits = caseKeys.reduce(function(s,k){return s+caseMap[k];},0);
+    var subFees  = caseKeys.reduce(function(s,k){return s+feeMap[k];},0);
+
+    var rows = caseKeys.map(function(k,i){
+      var pct = Math.round(caseMap[k]/maxUnits*100);
+      var color = COLORS[i%COLORS.length];
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+        +'<div style="width:160px;font-size:0.73rem;color:var(--text);flex-shrink:0;">'+k+'</div>'
+        +'<div style="flex:1;position:relative;background:#f0f4f8;border-radius:5px;height:26px;">'
+        +'<div style="position:absolute;left:0;top:0;width:'+Math.max(40,pct)+'%;background:'+color+';height:100%;border-radius:5px;"></div>'
+        +'<div style="position:absolute;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;padding:0 10px;gap:12px;">'
+        +'<span style="font-size:0.7rem;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5);white-space:nowrap;">'+caseMap[k]+' units</span>'
+        +'<span style="font-size:0.7rem;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5);white-space:nowrap;">'+fmtNum(feeMap[k])+' MMK</span>'
+        +'</div>'
+        +'</div></div>';
+    }).join('');
+
+    return '<div style="background:#e8f5ee;padding:8px 16px;border-bottom:1px solid #bbddd0;border-top:1px solid #e2e8f0;">'
+      +'<span style="color:#16a34a;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;">'+icon+' '+catLabel+'</span>'
+      +'</div>'
+      +'<div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;">'+rows+'</div>'
+      +'<div style="background:#f0fdf4;padding:9px 16px;display:flex;justify-content:space-between;align-items:center;">'
+      +'<span style="font-size:0.75rem;font-weight:700;color:#16a34a;">'+catLabel+' Subtotal</span>'
+      +'<span style="font-size:0.75rem;font-weight:700;color:#16a34a;">'+subUnits+' units | '+fmtNum(subFees)+' MMK</span>'
+      +'</div>';
+  }
+
+  var totalUnits = filtered.reduce(function(s,e){return s+(parseFloat(e.quantity)||1);},0);
+  var totalIncome = filtered.reduce(function(s,e){return s+getUnitPrice(e.caseType, e)*(parseFloat(e.quantity)||1);},0);
+
+  // Monthly income bar chart (TABLE 2 - KEEP)
+  var activeMths = q===0?[1,2,3,4,5,6,7,8,9,10,11,12]:quarterMonths[q];
+  var monthMap = {}, monthOrder = [];
+  activeMths.forEach(function(m){
+    var mk = yr+'-'+String(m).padStart(2,'0');
+    var mEntries = filtered.filter(function(e){return e.date&&e.date.startsWith(mk);});
+    if(mEntries.length){
+      var mLabel = new Date(yr,m-1,1).toLocaleDateString('en-GB',{month:'short'});
+      monthMap[mLabel] = mEntries.reduce(function(s,e){return s+getUnitPrice(e.caseType, e)*(parseFloat(e.quantity)||1);},0);
+      monthOrder.push(mLabel);
+    }
+  });
+  var incomeTotal = monthOrder.reduce(function(s,k){return s+monthMap[k];},0);
+  var maxIncome = monthOrder.length ? Math.max.apply(null, monthOrder.map(function(k){return monthMap[k];})) : 1;
+
+  var monthIncomeChart = monthOrder.map(function(k,i){
+    var pct = Math.round(monthMap[k]/maxIncome*100);
+    return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+      +'<div style="width:40px;font-size:0.73rem;color:var(--text);flex-shrink:0;">'+k+'</div>'
+      +'<div style="flex:1;position:relative;background:#f0f4f8;border-radius:5px;height:26px;">'
+      +'<div style="position:absolute;left:0;top:0;width:'+Math.max(5,pct)+'%;background:'+COLORS[i%COLORS.length]+';height:100%;border-radius:5px;"></div>'
+      +'<div style="position:absolute;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;padding:0 10px;">'
+      +'<span style="font-size:0.7rem;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.3);white-space:nowrap;">'+fmtNum(monthMap[k])+' MMK</span>'
+      +'</div></div></div>';
+  }).join('');
+
+  // Monthly breakdown table (TABLE 3 - KEEP)
+  var grandTotal = 0;
+  var tRows = '';
+  activeMths.forEach(function(mm){
+    var mmk = yr+'-'+String(mm).padStart(2,'0');
+    var mmEntries = filtered.filter(function(e){return e.date&&e.date.startsWith(mmk);});
+    if(!mmEntries.length) return;
+    var mmLabel = new Date(yr,mm-1,1).toLocaleDateString('en-GB',{month:'long'});
+    var mmTotal = mmEntries.reduce(function(s,e){return s+getUnitPrice(e.caseType, e)*(parseFloat(e.quantity)||1);},0);
+    grandTotal += mmTotal;
+    tRows += '<tr><td>'+mmLabel+'</td><td style="text-align:center">'+mmEntries.length+'</td><td style="text-align:right">'+fmtNum(mmTotal)+'</td></tr>';
+  });
+
+  var html = nav + qNav;
+
+  // TABLE 1 — Fixed/Removable (new)
+  html += '<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:14px;">';
+  html += buildSection(fixedItems, 'Fixed', '🔩');
+  html += buildSection(removableItems, 'Removable', '🦷');
+  html += '<div style="background:#1a3324;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;">'
+    +'<span style="font-size:0.8rem;font-weight:700;color:#fff;">TOTAL</span>'
+    +'<span style="font-size:0.85rem;font-weight:700;color:#4ade80;">'+totalUnits+' units | '+fmtNum(totalIncome)+' MMK</span>'
+    +'</div>';
+  html += '</div>';
+
+  // TABLE 2 — Monthly Income bar chart (KEEP)
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;">'
+    +'<div style="font-size:0.83rem;font-weight:700;color:var(--green);margin-bottom:12px;">💰 Monthly Income — '+periodLabel+'</div>'
+    +monthIncomeChart
+    +'<div style="margin-top:8px;font-size:0.76rem;color:var(--muted);">Total: <b style="color:#16a34a;">'+fmtNum(incomeTotal)+' MMK</b></div>'
+    +'</div>';
+
+  // TABLE 3 — Monthly Breakdown table (KEEP)
+  html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">'
+    +'<div style="font-size:0.83rem;font-weight:700;color:var(--green);margin-bottom:10px;">📋 Monthly Breakdown</div>'
+    +'<div style="overflow-x:auto;"><table class="rpt-table">'
+    +'<thead><tr><th>Month</th><th>Cases</th><th>Total (MMK)</th></tr></thead>'
+    +'<tbody>'+tRows+'</tbody>'
+    +'<tfoot><tr class="rpt-total-row"><td colspan="2">Period Total</td><td style="text-align:right">'+fmtNum(grandTotal)+'</td></tr></tfoot>'
+    +'</table></div>'
+    +'</div>';
+
+  return html;
+}
+
+function buildPercentHTML(offset) {
+  var yr = new Date().getFullYear() + (offset||0);
+  var DEDUCT = 3000000;
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  var nav = '<div class="rpt-nav">'
+    + '<button onclick="rptYearIdx--;renderReport(\'percent\',\'mob-percent-content\');renderReport(\'percent\',\'desk-report-view-content\');">‹</button>'
+    + '<span class="rpt-label">' + yr + '</span>'
+    + '<button onclick="rptYearIdx++;renderReport(\'percent\',\'mob-percent-content\');renderReport(\'percent\',\'desk-report-view-content\');">›</button>'
+    + '</div>';
+
+  var grandIncome = 0;
+  var grandAfter  = 0;
+  var grand70     = 0;
+  var grand30     = 0;
+  var grand15     = 0;
+
+  var rows = MONTHS.map(function(mName, mi) {
+    var mk = yr + '-' + String(mi+1).padStart(2,'0');
+    var mEntries = entries.filter(function(e){ return e.date && e.date.startsWith(mk); });
+    var income = mEntries.reduce(function(s,e){ return s + getUnitPrice(e.caseType, e)*(parseFloat(e.quantity)||1); }, 0);
+    var after3L = income > 0 ? Math.max(0, income - DEDUCT) : 0;
+    var p70  = Math.round(after3L * 0.70);
+    var p30  = Math.round(after3L * 0.30);
+    var p15  = Math.round(after3L * 0.15);
+
+    grandIncome += income;
+    grandAfter  += after3L;
+    grand70     += p70;
+    grand30     += p30;
+    grand15     += p15;
+
+    var isEmpty = income === 0;
+    var rowStyle = isEmpty ? 'color:var(--muted);' : '';
+
+    return '<tr style="' + rowStyle + '">'
+      + '<td style="font-weight:600;color:var(--text);">' + mName + '</td>'
+      + '<td style="text-align:right;">' + (isEmpty ? '—' : fmtNum(income)) + '</td>'
+      + '<td style="text-align:right;">' + (isEmpty ? '—' : fmtNum(after3L)) + '</td>'
+      + '<td style="text-align:right;color:#16a34a;">' + (isEmpty ? '—' : fmtNum(p70)) + '</td>'
+      + '<td style="text-align:right;color:#2563eb;">' + (isEmpty ? '—' : fmtNum(p30)) + '</td>'
+      + '<td style="text-align:right;color:#d97706;">' + (isEmpty ? '—' : fmtNum(p15)) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  var html = nav;
+
+  // Info card
+  html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:0.78rem;color:#166534;">'
+    + '📌 After 3L = Total Income − 3,000,000 MMK &nbsp;|&nbsp; 70%, 30%, 15% calculated from After 3L'
+    + '</div>';
+
+  html += '<div style="overflow-x:auto;">'
+    + '<table class="rpt-table" style="min-width:520px;">'
+    + '<thead><tr>'
+    + '<th style="min-width:100px;">Month</th>'
+    + '<th style="text-align:right;min-width:110px;">Total Income</th>'
+    + '<th style="text-align:right;min-width:110px;">After 3L</th>'
+    + '<th style="text-align:right;min-width:90px;">70%</th>'
+    + '<th style="text-align:right;min-width:90px;">30%</th>'
+    + '<th style="text-align:right;min-width:90px;">15%</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '<tfoot>'
+    + '<tr class="rpt-total-row">'
+    + '<td>Year Total</td>'
+    + '<td style="text-align:right;">' + fmtNum(grandIncome) + '</td>'
+    + '<td style="text-align:right;">' + fmtNum(grandAfter)  + '</td>'
+    + '<td style="text-align:right;color:#16a34a;">' + fmtNum(grand70) + '</td>'
+    + '<td style="text-align:right;color:#2563eb;">' + fmtNum(grand30) + '</td>'
+    + '<td style="text-align:right;color:#d97706;">' + fmtNum(grand15) + '</td>'
+    + '</tr>'
+    + '</tfoot>'
+    + '</table></div>';
+
+  return html;
+}
+
+function saveDueDate(dueDateKey, val, inputEl) {
+  localStorage.setItem(dueDateKey, val);
+}
+
+function fmtNum(n) {
+  return Math.round(n||0).toLocaleString('en-US');
+}
+
+</script>
