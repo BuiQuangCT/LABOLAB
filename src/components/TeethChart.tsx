@@ -37,7 +37,7 @@ export function TeethChart({ selectedTeeth, onChange }: TeethChartProps) {
   }, [selectedTeeth])
 
   const renderQuadrant = (teeth: string[], reverse: boolean) => (
-    <div className="flex flex-wrap gap-1 sm:gap-2 max-w-[200px] sm:max-w-[280px] justify-center sm:justify-start">
+    <div className="flex gap-1 sm:gap-2 justify-center sm:justify-start">
       {(reverse ? [...teeth].reverse() : teeth).map(tooth => {
         const isSelected = selectedTeeth.includes(tooth)
         return (
@@ -64,7 +64,7 @@ export function TeethChart({ selectedTeeth, onChange }: TeethChartProps) {
   const q4 = ['41', '42', '43', '44', '45', '46', '47', '48']
 
   return (
-    <div className="flex flex-col gap-4 bg-[#f8fafc] p-4 rounded-xl border border-border w-full">
+    <div className="flex flex-col gap-4 bg-[#f8fafc] p-4 rounded-xl border border-border w-full overflow-x-auto">
       {/* Header Info */}
       <div className="bg-[#f1f5f9] px-4 py-3 rounded-lg border border-slate-200 text-sm font-mono text-slate-600">
         {selectedTeeth.length === 0 ? (
