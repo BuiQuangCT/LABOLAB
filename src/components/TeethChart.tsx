@@ -37,7 +37,7 @@ export function TeethChart({ selectedTeeth, onChange }: TeethChartProps) {
   }, [selectedTeeth])
 
   const renderQuadrant = (teeth: string[], reverse: boolean) => (
-    <div className="flex gap-1 sm:gap-2 justify-center sm:justify-start">
+    <div className="flex gap-0.5 sm:gap-1 justify-center sm:justify-start">
       {(reverse ? [...teeth].reverse() : teeth).map(tooth => {
         const isSelected = selectedTeeth.includes(tooth)
         return (
@@ -45,7 +45,7 @@ export function TeethChart({ selectedTeeth, onChange }: TeethChartProps) {
             key={tooth}
             type="button"
             onClick={() => toggleTooth(tooth)}
-            className={`w-8 h-9 sm:w-9 sm:h-10 border rounded-md flex items-center justify-center text-xs sm:text-sm transition-all ${
+            className={`w-6 h-8 sm:w-8 sm:h-9 border rounded flex items-center justify-center text-[10px] sm:text-xs transition-all ${
               isSelected 
                 ? 'bg-[#1a3324] text-white border-[#1a3324] shadow-sm font-bold scale-105' 
                 : 'bg-white text-slate-600 hover:bg-slate-50 border-slate-300'
@@ -75,28 +75,28 @@ export function TeethChart({ selectedTeeth, onChange }: TeethChartProps) {
       </div>
 
       {/* Chart Layout */}
-      <div className="flex flex-col gap-4 py-2 relative w-full items-center">
+      <div className="flex flex-col gap-3 py-2 relative w-full items-center">
         
         {/* UPPER */}
-        <div className="flex gap-4 sm:gap-8 justify-center w-full relative">
-           <div className="absolute left-0 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400 hidden sm:block">R</div>
+        <div className="flex gap-2 sm:gap-4 justify-center w-full relative">
+           <div className="absolute left-0 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs font-mono text-slate-400 hidden sm:block">R</div>
            <div className="flex justify-end">{renderQuadrant(q1, true)}</div>
            <div className="w-px bg-slate-300"></div>
            <div className="flex justify-start">{renderQuadrant(q2, false)}</div>
         </div>
 
         {/* Divider text */}
-        <div className="w-full flex items-center gap-4 text-xs font-mono text-slate-400 px-4">
+        <div className="w-full flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs font-mono text-slate-400 px-0 sm:px-4">
           <div className="h-px bg-slate-300 flex-1"></div>
           <span>UPPER</span>
-          <div className="h-px bg-slate-300 w-8"></div>
+          <div className="h-px bg-slate-300 w-4 sm:w-8"></div>
           <span>LOWER</span>
           <div className="h-px bg-slate-300 flex-1"></div>
         </div>
 
         {/* LOWER */}
-        <div className="flex gap-4 sm:gap-8 justify-center w-full relative">
-           <div className="absolute left-0 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400 hidden sm:block">R</div>
+        <div className="flex gap-2 sm:gap-4 justify-center w-full relative">
+           <div className="absolute left-0 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs font-mono text-slate-400 hidden sm:block">R</div>
            <div className="flex justify-end">{renderQuadrant(q4, true)}</div>
            <div className="w-px bg-slate-300"></div>
            <div className="flex justify-start">{renderQuadrant(q3, false)}</div>
