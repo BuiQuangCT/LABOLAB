@@ -83,7 +83,7 @@ export default function VoucherPage() {
         return acc
       }, {} as Record<string, GroupedVoucher>)
 
-      const groupedArray = Object.values(grouped).sort((a, b) => {
+      const groupedArray = (Object.values(grouped) as GroupedVoucher[]).sort((a, b) => {
         // Sort unpaid first, then alphabetically
         if (a.isPaid === b.isPaid) {
           return a.clinicName.localeCompare(b.clinicName)
