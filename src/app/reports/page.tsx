@@ -155,7 +155,7 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                     <XAxis type="number" tickFormatter={(val) => `${val / 1000000}M`} />
                     <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
-                    <Tooltip formatter={(val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)} />
+                    <Tooltip formatter={(val: any) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)} />
                     <Bar dataKey="revenue" fill="var(--color-primary)" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -176,7 +176,7 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="date" tick={{fontSize: 12}} tickFormatter={(val) => val.split('-').slice(1).join('/')} />
                     <YAxis tickFormatter={(val) => `${val / 1000000}M`} tick={{fontSize: 12}} />
-                    <Tooltip formatter={(val: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)} />
+                    <Tooltip formatter={(val: any) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)} />
                     <Legend />
                     <Line type="monotone" name="Actual Revenue" dataKey="historical_revenue" stroke="var(--color-primary)" strokeWidth={3} dot={{r: 4}} activeDot={{r: 6}} />
                     <Line type="monotone" name="Forecasted (4 weeks)" dataKey="forecasted_revenue" stroke="#f59e0b" strokeWidth={3} strokeDasharray="5 5" dot={{r: 4}} />
