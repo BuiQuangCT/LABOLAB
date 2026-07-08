@@ -436,15 +436,15 @@ export default function DailyRecordPage() {
                           <input value={row.patientName} onChange={e => updateRow(row.id, 'patientName', e.target.value)} placeholder="Patient Name" className="flex-1 p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary font-medium" />
                         </div>
 
-                        {/* Teeth Section - Dynamic based on Group */}
+                        {/* Teeth Section - Dynamic based on Category */}
                         {row.caseType && (
                           <div className="bg-[#f8f9fb] p-3 rounded-xl border border-border">
-                            {group === 'A' && (
+                            {globalCategory === 'fixed' && (
                               <div className="mb-3">
                                 <TeethChart selectedTeeth={row.teethNo} onChange={teeth => updateRow(row.id, 'teethNo', teeth)} />
                               </div>
                             )}
-                            {group === 'B' && (
+                            {globalCategory === 'removable' && (
                               <div className="flex gap-2 mb-3">
                                 <button onClick={() => handleUpperLowerToggle(row.id, row, 'Upper')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${row.teethNo.includes('Upper') ? 'bg-[#e8f5ee] border-2 border-primary text-primary' : 'bg-white border-2 border-border text-muted-foreground'}`}>Upper</button>
                                 <button onClick={() => handleUpperLowerToggle(row.id, row, 'Lower')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${row.teethNo.includes('Lower') ? 'bg-[#e8f5ee] border-2 border-primary text-primary' : 'bg-white border-2 border-border text-muted-foreground'}`}>Lower</button>
