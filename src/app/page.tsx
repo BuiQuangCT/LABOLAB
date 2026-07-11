@@ -1,9 +1,41 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Calendar, Building2, Receipt, TrendingUp, AlertTriangle, Plus, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
+
+interface StatCardProps {
+  title: string
+  value: string | number
+  icon: React.ReactNode
+  iconColorClass: string
+  delay?: number
+}
+
+// Using Component Composition & Memoization from frontend-patterns skill
+const StatCard = React.memo<StatCardProps>(({ title, value, icon, iconColorClass, delay = 0 }) => {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay }}
+      className="bg-white p-5 rounded-md border border-slate-200 flex flex-col hover:border-slate-300 transition-colors shadow-[2px_2px_0px_0px_rgba(226,232,240,0.5)]"
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className={`p-2 bg-slate-50 border border-slate-100 rounded-sm ${iconColorClass}`}>
+          {icon}
+        </div>
+        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">{title}</h2>
+      </div>
+      <div className="mt-auto">
+        <span className="text-3xl font-semibold text-slate-800 tracking-tight">{value}</span>
+      </div>
+    </motion.div>
+  )
+})
+StatCard.displayName = 'StatCard'
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -24,7 +56,6 @@ export default function Dashboard() {
       const monthStr = todayStr.substring(0, 7) // "YYYY-MM"
 
       try {
-        // Fetch all recent entries to calculate stats & show activity
         const { data: entries } = await supabase
           .from('entries')
           .select('*')
@@ -32,7 +63,6 @@ export default function Dashboard() {
           .order('id', { ascending: false })
           .limit(100)
 
-        // Fetch total unique clinics
         const { data: clinics } = await supabase
           .from('clinics')
           .select('clinic')
@@ -63,140 +93,137 @@ export default function Dashboard() {
     fetchDashboardData()
   }, [])
 
+  // Memoizing heavy formatting calculation
+  const formattedRevenue = useMemo(() => {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.monthlyRevenue)
+  }, [stats.monthlyRevenue])
+
   if (loading) {
     return (
       <div className="flex h-[80vh] items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     )
   }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Welcome back! Here is your lab's performance overview.</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
+          <p className="text-sm text-slate-500 mt-1">Clinical overview and daily records</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Link href="/daily-record" className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary font-semibold rounded-xl hover:bg-primary/20 transition-colors shadow-sm">
-            <Plus size={18} /> New Record
+          <Link href="/daily-record" className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-50 transition-colors shadow-sm">
+            <Plus size={16} /> New Record
           </Link>
-          <Link href="/voucher" className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-xl hover:bg-primary/90 transition-colors shadow-sm">
-            <Receipt size={18} /> Vouchers
+          <Link href="/voucher" className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-medium rounded-md hover:bg-teal-700 transition-colors shadow-sm">
+            <Receipt size={16} /> Vouchers
           </Link>
         </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border flex flex-col hover:shadow-md transition-all group relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-colors translate-x-1/3 -translate-y-1/3"></div>
-          <div className="flex items-center gap-3 mb-4 relative z-10">
-            <div className="p-2.5 bg-primary/10 text-primary rounded-xl">
-              <Calendar size={20} />
-            </div>
-            <h2 className="text-sm font-semibold text-muted-foreground">Cases Today</h2>
-          </div>
-          <div className="mt-auto relative z-10">
-            <span className="text-4xl font-bold text-foreground font-sans tracking-tight">{stats.todayCases}</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border flex flex-col hover:shadow-md transition-all group relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full blur-3xl group-hover:bg-accent/10 transition-colors translate-x-1/3 -translate-y-1/3"></div>
-          <div className="flex items-center gap-3 mb-4 relative z-10">
-            <div className="p-2.5 bg-accent/10 text-accent rounded-xl">
-              <ClipboardList size={20} />
-            </div>
-            <h2 className="text-sm font-semibold text-muted-foreground">Cases This Month</h2>
-          </div>
-          <div className="mt-auto relative z-10">
-            <span className="text-4xl font-bold text-foreground font-sans tracking-tight">{stats.monthlyCases}</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border flex flex-col hover:shadow-md transition-all group relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-full blur-3xl group-hover:bg-green-500/10 transition-colors translate-x-1/3 -translate-y-1/3"></div>
-          <div className="flex items-center gap-3 mb-4 relative z-10">
-            <div className="p-2.5 bg-green-500/10 text-green-600 rounded-xl">
-              <TrendingUp size={20} />
-            </div>
-            <h2 className="text-sm font-semibold text-muted-foreground">Revenue ({new Date().toLocaleString('en-US', { month: 'short' })})</h2>
-          </div>
-          <div className="mt-auto relative z-10">
-            <span className="text-3xl font-bold text-foreground font-sans tracking-tight">
-              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.monthlyRevenue)}
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border flex flex-col hover:shadow-md transition-all group relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-3xl group-hover:bg-purple-500/10 transition-colors translate-x-1/3 -translate-y-1/3"></div>
-          <div className="flex items-center gap-3 mb-4 relative z-10">
-            <div className="p-2.5 bg-purple-500/10 text-purple-600 rounded-xl">
-              <Building2 size={20} />
-            </div>
-            <h2 className="text-sm font-semibold text-muted-foreground">Total Clinics</h2>
-          </div>
-          <div className="mt-auto relative z-10">
-            <span className="text-4xl font-bold text-foreground font-sans tracking-tight">{stats.totalClinics}</span>
-          </div>
-        </div>
+      {/* Quick Stats - Bento Box Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Cases Today" 
+          value={stats.todayCases} 
+          icon={<Calendar size={18} />} 
+          iconColorClass="text-blue-600"
+          delay={0.1}
+        />
+        <StatCard 
+          title="Cases This Month" 
+          value={stats.monthlyCases} 
+          icon={<ClipboardList size={18} />} 
+          iconColorClass="text-teal-600"
+          delay={0.2}
+        />
+        <StatCard 
+          title={`Revenue (${new Date().toLocaleString('en-US', { month: 'short' })})`} 
+          value={formattedRevenue} 
+          icon={<TrendingUp size={18} />} 
+          iconColorClass="text-emerald-600"
+          delay={0.3}
+        />
+        <StatCard 
+          title="Total Clinics" 
+          value={stats.totalClinics} 
+          icon={<Building2 size={18} />} 
+          iconColorClass="text-indigo-600"
+          delay={0.4}
+        />
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-2xl shadow-sm border border-border overflow-hidden">
-        <div className="p-6 border-b border-border flex justify-between items-center bg-secondary/30">
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.5 }}
+        className="bg-white rounded-md border border-slate-200 overflow-hidden shadow-sm"
+      >
+        <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
           <div>
-            <h2 className="font-bold text-lg text-foreground font-serif tracking-tight">Recent Activity</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Latest cases across all clinics</p>
+            <h2 className="font-semibold text-slate-800 text-base">Recent Activity</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Latest clinical records</p>
           </div>
-          <Link href="/daily-record" className="text-sm font-semibold text-primary hover:text-primary/80 transition-colors flex items-center gap-1 bg-primary/5 px-3 py-1.5 rounded-lg hover:bg-primary/10">
-            View All <TrendingUp size={16} />
+          <Link href="/daily-record" className="text-xs font-medium text-teal-600 hover:text-teal-700 transition-colors flex items-center gap-1 px-3 py-1.5 border border-teal-100 bg-teal-50 rounded-sm hover:bg-teal-100">
+            View All <TrendingUp size={14} />
           </Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider bg-secondary/50 border-b border-border">
+            <thead className="text-[11px] text-slate-500 font-medium uppercase tracking-wider bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-5 py-4 w-12 text-center">No</th>
-                <th className="px-5 py-4 w-24">Date</th>
-                <th className="px-5 py-4 w-40">Clinic</th>
-                <th className="px-5 py-4 w-40">Doctor</th>
-                <th className="px-5 py-4 w-40">Patient</th>
-                <th className="px-5 py-4 min-w-[200px]">Case</th>
-                <th className="px-5 py-4 w-20">Shade</th>
-                <th className="px-5 py-4 w-32">Teeth No.</th>
-                <th className="px-5 py-4 w-16 text-center">Qty</th>
-                <th className="px-5 py-4">Remark</th>
+                <th className="px-5 py-3 w-12 text-center">No</th>
+                <th className="px-5 py-3 w-24">Date</th>
+                <th className="px-5 py-3 w-40">Clinic</th>
+                <th className="px-5 py-3 w-40">Doctor</th>
+                <th className="px-5 py-3 w-40">Patient</th>
+                <th className="px-5 py-3 min-w-[200px]">Case</th>
+                <th className="px-5 py-3 w-20">Shade</th>
+                <th className="px-5 py-3 w-32">Teeth No.</th>
+                <th className="px-5 py-3 w-16 text-center">Qty</th>
+                <th className="px-5 py-3">Remark</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
-              {recentEntries.map((entry, idx) => (
-                <tr key={entry.id} className={`hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0 ${entry.is_anomaly ? 'bg-amber-50/50' : ''}`}>
-                  <td className="px-5 py-4 text-center text-muted-foreground text-xs font-mono">{idx + 1}</td>
-                  <td className="px-5 py-4 text-muted-foreground text-xs">{entry.date.split('-').slice(1).join('/') + '/' + entry.date.split('-')[0]}</td>
-                  <td className="px-5 py-4 font-medium text-foreground">{entry.clinicName}</td>
-                  <td className="px-5 py-4 text-muted-foreground">{entry.doctorName || '-'}</td>
-                  <td className="px-5 py-4 font-medium text-foreground">{entry.patientName}</td>
-                  <td className="px-5 py-4 text-foreground">
-                    {entry.caseType}
-                    {entry.is_anomaly && (
-                      <span className="ml-2 inline-flex items-center text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Anomaly Detected">
-                        <AlertTriangle size={10} className="mr-1"/> Anomaly
+            <tbody className="divide-y divide-slate-100">
+              <AnimatePresence>
+                {recentEntries.map((entry, idx) => (
+                  <motion.tr 
+                    key={entry.id} 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.2, delay: 0.5 + (idx * 0.05) }}
+                    className={`hover:bg-slate-50 transition-colors ${entry.is_anomaly ? 'bg-amber-50/30' : ''}`}
+                  >
+                    <td className="px-5 py-3 text-center text-slate-400 text-xs font-mono">{idx + 1}</td>
+                    <td className="px-5 py-3 text-slate-500 text-xs">{entry.date.split('-').slice(1).join('/') + '/' + entry.date.split('-')[0]}</td>
+                    <td className="px-5 py-3 font-medium text-slate-800">{entry.clinicName}</td>
+                    <td className="px-5 py-3 text-slate-500">{entry.doctorName || '-'}</td>
+                    <td className="px-5 py-3 text-slate-700">{entry.patientName}</td>
+                    <td className="px-5 py-3 text-slate-700">
+                      {entry.caseType}
+                      {entry.is_anomaly && (
+                        <span className="ml-2 inline-flex items-center text-amber-700 border border-amber-200 bg-amber-50 px-1.5 py-0.5 rounded-sm text-[10px] font-medium" title="Anomaly Detected">
+                          <AlertTriangle size={10} className="mr-1"/> Anomaly
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-slate-500">{entry.shade || '-'}</td>
+                    <td className="px-5 py-3 font-mono text-xs">
+                      <span className="text-teal-700 bg-teal-50 border border-teal-100 rounded-sm px-1.5 py-0.5 inline-block">
+                        {Array.isArray(entry.teethNo) ? entry.teethNo.join(' ') : (entry.teethNo || '-')}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-muted-foreground">{entry.shade || '-'}</td>
-                  <td className="px-5 py-4 font-mono text-xs text-primary bg-primary/5 rounded px-2">{Array.isArray(entry.teethNo) ? entry.teethNo.join(' ') : (entry.teethNo || '-')}</td>
-                  <td className="px-5 py-4 text-center font-semibold text-foreground">{entry.quantity}</td>
-                  <td className="px-5 py-4 text-xs text-muted-foreground truncate max-w-[200px]">{entry.remark || '-'}</td>
-                </tr>
-              ))}
-              {recentEntries.length === 0 && (
+                    </td>
+                    <td className="px-5 py-3 text-center font-medium text-slate-700">{entry.quantity}</td>
+                    <td className="px-5 py-3 text-xs text-slate-500 truncate max-w-[200px]">{entry.remark || '-'}</td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+              {recentEntries.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-muted-foreground text-sm">
+                  <td colSpan={10} className="px-5 py-12 text-center text-slate-500 text-sm">
                     No recent activity found.
                   </td>
                 </tr>
@@ -204,7 +231,7 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }

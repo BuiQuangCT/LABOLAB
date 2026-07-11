@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { TeethChart } from '@/components/TeethChart'
 import { Plus, AlertTriangle, X, ChevronLeft, ChevronRight, Trash2, Edit } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 
 type CaseRow = {
   id: string
@@ -339,106 +339,114 @@ export default function DailyRecordPage() {
   const availableDoctors = Array.from(new Set(clinics.filter(c => c.clinic === clinicName && c.doctor).map(c => c.doctor)))
 
   return (
-    <div className="flex flex-col min-h-full pb-12 w-full">
+    <div className="flex flex-col min-h-full pb-12 w-full max-w-7xl mx-auto">
       
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 mt-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">Daily Record</h1>
-          <p className="text-muted-foreground mt-1">Manage cases for {todayFormatted}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Daily Record</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage cases for {todayFormatted}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={openNewModal} className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground font-semibold rounded-xl hover:bg-primary/90 transition-colors shadow-sm">
-            <Plus size={18} /> New Record
+          <button onClick={openNewModal} className="flex items-center gap-2 px-5 py-2 bg-teal-600 text-white text-sm font-medium rounded-md hover:bg-teal-700 transition-colors shadow-sm">
+            <Plus size={16} /> New Record
           </button>
         </div>
       </div>
 
       <div className="w-full">
-        {/* Main Table */}
-        <div className="bg-white rounded-t-2xl border border-border overflow-hidden">
+        {/* Main Table - Bento Box Style */}
+        <div className="bg-white rounded-md border border-slate-200 overflow-hidden shadow-sm">
           
           {/* Table Header Controls */}
-          <div className="bg-secondary/30 border-b border-border px-6 py-5 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <h2 className="font-bold text-lg text-foreground font-serif">Monthly Records</h2>
+          <div className="bg-slate-50 border-b border-slate-200 px-5 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <h2 className="font-semibold text-slate-800 text-base">Monthly Records</h2>
             
             <div className="flex items-center gap-6">
               {/* Month Navigator */}
-              <div className="flex items-center gap-4 bg-white rounded-xl border border-border px-2 py-1.5 shadow-sm">
-                <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-                  <ChevronLeft size={18} />
+              <div className="flex items-center gap-2 bg-white rounded-sm border border-slate-200 px-1 py-1 shadow-sm">
+                <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-slate-50 rounded-sm text-slate-500 hover:text-slate-700 transition-colors">
+                  <ChevronLeft size={16} />
                 </button>
-                <span className="font-mono text-sm font-bold text-primary w-28 text-center">
+                <span className="font-medium text-sm text-teal-700 w-28 text-center uppercase tracking-wider text-[11px]">
                   {monthFormatted}
                 </span>
-                <button onClick={() => changeMonth(1)} className="p-1 hover:bg-secondary rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-                  <ChevronRight size={18} />
+                <button onClick={() => changeMonth(1)} className="p-1 hover:bg-slate-50 rounded-sm text-slate-500 hover:text-slate-700 transition-colors">
+                  <ChevronRight size={16} />
                 </button>
               </div>
-
             </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider bg-secondary/50 border-b border-border">
+              <thead className="text-[11px] text-slate-500 font-medium uppercase tracking-wider bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-5 py-4 w-12 text-center">No</th>
-                  <th className="px-5 py-4 w-24">Date</th>
-                  <th className="px-5 py-4 w-40">Clinic</th>
-                  <th className="px-5 py-4 w-40">Doctor</th>
-                  <th className="px-5 py-4 w-40">Patient</th>
-                  <th className="px-5 py-4 min-w-[200px]">Case</th>
-                  <th className="px-5 py-4 w-20">Shade</th>
-                  <th className="px-5 py-4 w-32">Teeth No.</th>
-                  <th className="px-5 py-4 w-16 text-center">Qty</th>
-                  <th className="px-5 py-4">Remark</th>
-                  <th className="px-5 py-4 w-20 text-center">Actions</th>
+                  <th className="px-5 py-3 w-12 text-center">No</th>
+                  <th className="px-5 py-3 w-24">Date</th>
+                  <th className="px-5 py-3 w-40">Clinic</th>
+                  <th className="px-5 py-3 w-40">Doctor</th>
+                  <th className="px-5 py-3 w-40">Patient</th>
+                  <th className="px-5 py-3 min-w-[200px]">Case</th>
+                  <th className="px-5 py-3 w-20">Shade</th>
+                  <th className="px-5 py-3 w-32">Teeth No.</th>
+                  <th className="px-5 py-3 w-16 text-center">Qty</th>
+                  <th className="px-5 py-3">Remark</th>
+                  <th className="px-5 py-3 w-20 text-center">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {entries.map((entry, idx) => (
-                  <motion.tr 
-                  key={entry.id} 
-                  initial={{ opacity: 0, y: 10 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  transition={{ duration: 0.2, delay: Math.min(idx * 0.03, 0.5) }}
-                  className={`hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0 ${entry.is_anomaly ? 'bg-amber-50/50' : ''}`}
-                >
-                    <td className="px-5 py-4 text-center text-muted-foreground text-xs font-mono">{entries.length - idx}</td>
-                    <td className="px-5 py-4 text-muted-foreground text-xs">{entry.date.split('-').slice(1).join('/') + '/' + entry.date.split('-')[0]}</td>
-                    <td className="px-5 py-4 font-medium text-foreground">{entry.clinicName}</td>
-                    <td className="px-5 py-4 text-muted-foreground">{entry.doctorName || '-'}</td>
-                    <td className="px-5 py-4 font-medium text-foreground">{entry.patientName}</td>
-                    <td className="px-5 py-4 text-foreground">
-                      {entry.caseType}
-                      {entry.is_anomaly && (
-                        <span className="ml-2 inline-flex items-center text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Anomaly Detected">
-                          <AlertTriangle size={10} className="mr-1"/> Anomaly
+              <tbody className="divide-y divide-slate-100">
+                <AnimatePresence>
+                  {entries.map((entry, idx) => (
+                    <motion.tr 
+                      key={entry.id} 
+                      initial={{ opacity: 0, x: -10 }} 
+                      animate={{ opacity: 1, x: 0 }} 
+                      exit={{ opacity: 0, x: 10 }}
+                      transition={{ duration: 0.2, delay: Math.min(idx * 0.02, 0.3) }}
+                      className={`hover:bg-slate-50 transition-colors ${entry.is_anomaly ? 'bg-amber-50/30' : ''}`}
+                    >
+                      <td className="px-5 py-3 text-center text-slate-400 text-xs font-mono">{entries.length - idx}</td>
+                      <td className="px-5 py-3 text-slate-500 text-xs">{entry.date.split('-').slice(1).join('/') + '/' + entry.date.split('-')[0]}</td>
+                      <td className="px-5 py-3 font-medium text-slate-800">{entry.clinicName}</td>
+                      <td className="px-5 py-3 text-slate-500">{entry.doctorName || '-'}</td>
+                      <td className="px-5 py-3 text-slate-700">{entry.patientName}</td>
+                      <td className="px-5 py-3 text-slate-700">
+                        {entry.caseType}
+                        {entry.is_anomaly && (
+                          <span className="ml-2 inline-flex items-center text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-sm text-[10px] font-medium" title="Anomaly Detected">
+                            <AlertTriangle size={10} className="mr-1"/> Anomaly
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-slate-500">{entry.shade || '-'}</td>
+                      <td className="px-5 py-3 font-mono text-xs">
+                        <span className="text-teal-700 bg-teal-50 border border-teal-100 rounded-sm px-1.5 py-0.5 inline-block">
+                          {Array.isArray(entry.teethNo) ? entry.teethNo.join(' ') : (entry.teethNo || '-')}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-4 text-muted-foreground">{entry.shade || '-'}</td>
-                    <td className="px-5 py-4 font-mono text-xs text-primary bg-primary/5 rounded px-2">{Array.isArray(entry.teethNo) ? entry.teethNo.join(' ') : (entry.teethNo || '-')}</td>
-                    <td className="px-5 py-4 text-center font-semibold text-foreground">{entry.quantity}</td>
-                    <td className="px-5 py-4 text-xs text-muted-foreground truncate max-w-[200px]">{entry.remark || '-'}</td>
-                    <td className="px-5 py-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => handleEditEntry(entry)} className="p-1.5 text-blue-500 hover:bg-blue-50 hover:shadow-sm rounded-md transition-colors" title="Edit">
-                          <Edit size={16} />
-                        </button>
-                        <button onClick={() => handleDeleteEntry(entry.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 hover:shadow-sm rounded-md transition-colors" title="Delete">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
+                      </td>
+                      <td className="px-5 py-3 text-center font-medium text-slate-700">{entry.quantity}</td>
+                      <td className="px-5 py-3 text-xs text-slate-500 truncate max-w-[200px]">{entry.remark || '-'}</td>
+                      <td className="px-5 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => handleEditEntry(entry)} className="p-1.5 text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-100 rounded-sm transition-colors" title="Edit">
+                            <Edit size={14} />
+                          </button>
+                          <button onClick={() => handleDeleteEntry(entry.id)} className="p-1.5 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-sm transition-colors" title="Delete">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
                 {entries.length === 0 && !loading && (
-                  <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground text-sm font-mono">No records found for {monthFormatted}.</td></tr>
+                  <tr><td colSpan={11} className="px-5 py-12 text-center text-slate-500 text-sm">No records found for {monthFormatted}.</td></tr>
                 )}
                 {loading && (
-                  <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground text-sm font-mono">Loading data...</td></tr>
+                  <tr><td colSpan={11} className="px-5 py-12 text-center">
+                    <div className="w-6 h-6 border-2 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  </td></tr>
                 )}
               </tbody>
             </table>
@@ -446,202 +454,226 @@ export default function DailyRecordPage() {
         </div>
       </div>
 
-      {/* Modal Overlay */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="bg-secondary/50 text-foreground px-6 py-4 font-serif font-bold text-xl flex justify-between items-center sticky top-0 z-10 border-b border-border">
-              <span>{editingEntryId ? 'Edit Entry' : 'New Entry'}</span>
-              <button onClick={closeModal} className="text-muted-foreground hover:bg-muted p-1.5 rounded-lg transition-colors"><X size={20}/></button>
-            </div>
+      {/* Record Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-white rounded-md w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-xl flex flex-col border border-slate-200"
+            >
+              {/* Header */}
+              <div className="bg-slate-50 text-slate-800 px-6 py-4 font-semibold text-lg flex justify-between items-center sticky top-0 z-10 border-b border-slate-200">
+                <span>{editingEntryId ? 'Edit Record' : 'New Record'}</span>
+                <button onClick={closeModal} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-1.5 rounded-sm transition-colors"><X size={18}/></button>
+              </div>
 
-            {/* Body */}
-            <div className="p-6 space-y-5 flex-1">
-              
-              {/* Date & Category */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">Date <span className="text-red-500">*</span></label>
-                  <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary transition-colors" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">Category <span className="text-red-500">*</span></label>
-                  <div className="flex gap-2">
-                    <button onClick={() => setGlobalCategory('fixed')} className={`flex-1 py-2 rounded-xl text-sm transition-all border-2 ${globalCategory === 'fixed' ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' : 'bg-white border-transparent text-muted-foreground hover:bg-muted'}`}>
-                      🔩 Fixed
-                    </button>
-                    <button onClick={() => setGlobalCategory('removable')} className={`flex-1 py-2 rounded-xl text-sm transition-all border-2 ${globalCategory === 'removable' ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' : 'bg-white border-transparent text-muted-foreground hover:bg-muted'}`}>
-                      🦷 Removable
-                    </button>
+              {/* Body */}
+              <div className="p-6 space-y-6 flex-1">
+                
+                {/* Date & Category */}
+                <div className="grid grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Date <span className="text-red-500">*</span></label>
+                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 transition-all shadow-sm" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Category <span className="text-red-500">*</span></label>
+                    <div className="flex gap-2">
+                      <button onClick={() => setGlobalCategory('fixed')} className={`flex-1 py-2 rounded-sm text-sm transition-all border ${globalCategory === 'fixed' ? 'bg-teal-50 border-teal-600 text-teal-700 font-medium shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                        🔩 Fixed
+                      </button>
+                      <button onClick={() => setGlobalCategory('removable')} className={`flex-1 py-2 rounded-sm text-sm transition-all border ${globalCategory === 'removable' ? 'bg-teal-50 border-teal-600 text-teal-700 font-medium shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                        🦷 Removable
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Clinic & Doctor */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">Clinic Name <span className="text-red-500">*</span></label>
-                  {isAddingClinic ? (
-                    <div className="flex gap-2">
-                      <input autoFocus value={newClinicName} onChange={e => setNewClinicName(e.target.value)} placeholder="New Clinic..." className="w-full p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary" />
-                      <button onClick={handleSaveNewClinic} className="bg-primary text-white px-3 rounded-xl text-xs font-bold">Lưu</button>
-                      <button onClick={() => setIsAddingClinic(false)} className="bg-secondary px-3 rounded-xl text-xs font-bold">Hủy</button>
-                    </div>
-                  ) : (
-                    <select value={clinicName} onChange={e => {
-                      if (e.target.value === '__NEW__') setIsAddingClinic(true)
-                      else { setClinicName(e.target.value); setDoctorName('') }
-                    }} className="w-full p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary cursor-pointer">
-                      <option value="">— Select Clinic —</option>
-                      {uniqueClinics.map(c => <option key={c} value={c}>{c}</option>)}
-                      <option value="__NEW__" className="font-bold text-primary">+ Thêm Clinic mới</option>
-                    </select>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">Doctor Name</label>
-                  {isAddingDoctor ? (
-                    <div className="flex gap-2">
-                      <input autoFocus value={newDoctorName} onChange={e => setNewDoctorName(e.target.value)} placeholder="New Doctor..." className="w-full p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary" />
-                      <button onClick={handleSaveNewDoctor} className="bg-primary text-white px-3 rounded-xl text-xs font-bold">Lưu</button>
-                      <button onClick={() => setIsAddingDoctor(false)} className="bg-secondary px-3 rounded-xl text-xs font-bold">Hủy</button>
-                    </div>
-                  ) : (
-                    <select value={doctorName} onChange={e => {
-                      if (e.target.value === '__NEW__') setIsAddingDoctor(true)
-                      else setDoctorName(e.target.value)
-                    }} className="w-full p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary cursor-pointer">
-                      <option value="">— Select Doctor —</option>
-                      {availableDoctors.map(d => <option key={d} value={d}>Dr. {d}</option>)}
-                      <option value="__NEW__" className="font-bold text-primary">+ Thêm Doctor mới</option>
-                    </select>
-                  )}
-                </div>
-              </div>
-
-              {/* Dynamic Cases */}
-              <div className="space-y-3 pt-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">Case Type & Patient Name</span>
-                  {!editingEntryId && <button onClick={addEmptyRow} className="bg-primary text-white rounded-md px-2 py-0.5 text-sm font-bold shadow-sm">+</button>}
-                </div>
-
-                {rows.map((row, idx) => {
-                  const caseTypes = priceList.filter(p => p.category === globalCategory).map(p => p.item)
-                  const group = getCaseGroup(row.caseType)
-                  const standardPrice = priceList.find(p => p.item === row.caseType)?.price
-                  const isAnomaly = standardPrice !== undefined && row.unitPrice !== standardPrice
-
-                  return (
-                    <div key={row.id} className="border-2 border-primary rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-primary/5 px-4 py-2 flex justify-between items-center border-b border-primary/20">
-                        <span className="text-primary text-[11px] font-mono tracking-widest font-bold">CASE {idx + 1}</span>
-                        <button onClick={() => deleteRow(row.id)} className="text-rose-500 hover:bg-rose-100 hover:text-rose-600 rounded-md p-1 px-2 text-xs font-bold bg-white shadow-sm border border-rose-200 leading-none transition-colors">Delete</button>
+                {/* Clinic & Doctor */}
+                <div className="grid grid-cols-2 gap-5">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Clinic Name <span className="text-red-500">*</span></label>
+                    {isAddingClinic ? (
+                      <div className="flex gap-2">
+                        <input autoFocus value={newClinicName} onChange={e => setNewClinicName(e.target.value)} placeholder="New Clinic..." className="w-full p-2 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-sm" />
+                        <button onClick={handleSaveNewClinic} className="bg-teal-600 text-white px-3 rounded-sm text-xs font-medium hover:bg-teal-700">Save</button>
+                        <button onClick={() => setIsAddingClinic(false)} className="bg-slate-100 text-slate-600 border border-slate-200 px-3 rounded-sm text-xs font-medium hover:bg-slate-200">Cancel</button>
                       </div>
-                      <div className="p-3 space-y-3 bg-white">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          {addingMaterialRowId === row.id ? (
-                            <div className="flex gap-2 flex-[1.5]">
-                              <input autoFocus value={newMaterialName} onChange={e => setNewMaterialName(e.target.value)} placeholder="Tên Case mới" className="w-full p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary" />
-                              <button onClick={() => handleSaveNewMaterial(row.id)} className="bg-primary text-white px-3 rounded-xl text-xs font-bold">Lưu</button>
-                              <button onClick={() => setAddingMaterialRowId(null)} className="bg-secondary px-3 rounded-xl text-xs font-bold">Hủy</button>
-                            </div>
-                          ) : (
-                            <select value={row.caseType} onChange={e => {
-                              if (e.target.value === '__NEW__') setAddingMaterialRowId(row.id)
-                              else updateRow(row.id, 'caseType', e.target.value)
-                            }} className="flex-[1.5] p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary cursor-pointer font-medium">
-                              <option value="">— Select Case —</option>
-                              {caseTypes.map(c => <option key={c} value={c}>{c}</option>)}
-                              <option value="__NEW__" className="font-bold text-primary bg-primary/5">+ Thêm Case mới</option>
-                            </select>
-                          )}
-                          <input value={row.patientName} onChange={e => updateRow(row.id, 'patientName', e.target.value)} placeholder="Patient Name" className="flex-1 p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary font-medium" />
+                    ) : (
+                      <select value={clinicName} onChange={e => {
+                        if (e.target.value === '__NEW__') setIsAddingClinic(true)
+                        else { setClinicName(e.target.value); setDoctorName('') }
+                      }} className="w-full p-2.5 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 cursor-pointer shadow-sm">
+                        <option value="">— Select Clinic —</option>
+                        {uniqueClinics.map(c => <option key={c} value={c}>{c}</option>)}
+                        <option value="__NEW__" className="font-semibold text-teal-600 bg-teal-50">+ Add New Clinic</option>
+                      </select>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Doctor Name</label>
+                    {isAddingDoctor ? (
+                      <div className="flex gap-2">
+                        <input autoFocus value={newDoctorName} onChange={e => setNewDoctorName(e.target.value)} placeholder="New Doctor..." className="w-full p-2 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 shadow-sm" />
+                        <button onClick={handleSaveNewDoctor} className="bg-teal-600 text-white px-3 rounded-sm text-xs font-medium hover:bg-teal-700">Save</button>
+                        <button onClick={() => setIsAddingDoctor(false)} className="bg-slate-100 text-slate-600 border border-slate-200 px-3 rounded-sm text-xs font-medium hover:bg-slate-200">Cancel</button>
+                      </div>
+                    ) : (
+                      <select value={doctorName} onChange={e => {
+                        if (e.target.value === '__NEW__') setIsAddingDoctor(true)
+                        else setDoctorName(e.target.value)
+                      }} className="w-full p-2.5 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 cursor-pointer shadow-sm">
+                        <option value="">— Select Doctor —</option>
+                        {availableDoctors.map(d => <option key={d} value={d}>Dr. {d}</option>)}
+                        <option value="__NEW__" className="font-semibold text-teal-600 bg-teal-50">+ Add New Doctor</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                {/* Dynamic Cases */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                    <span className="text-[10px] font-semibold tracking-wider text-slate-500 uppercase">Case Details</span>
+                    {!editingEntryId && <button onClick={addEmptyRow} className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors flex items-center gap-1"><Plus size={14}/> Add Case</button>}
+                  </div>
+
+                  {rows.map((row, idx) => {
+                    const caseTypes = priceList.filter(p => p.category === globalCategory).map(p => p.item)
+                    const standardPrice = priceList.find(p => p.item === row.caseType)?.price
+                    const isAnomaly = standardPrice !== undefined && row.unitPrice !== standardPrice
+
+                    return (
+                      <div key={row.id} className="border border-slate-200 rounded-md overflow-hidden bg-white shadow-sm">
+                        <div className="bg-slate-50 px-4 py-2.5 flex justify-between items-center border-b border-slate-200">
+                          <span className="text-slate-600 text-[11px] font-mono tracking-widest font-semibold">CASE {idx + 1}</span>
+                          <button onClick={() => deleteRow(row.id)} className="text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-sm p-1 px-2 text-xs font-medium transition-colors flex items-center gap-1"><Trash2 size={12}/> Remove</button>
                         </div>
-
-                        {/* Teeth Section - Dynamic based on Category */}
-                        {row.caseType && (
-                          <div className="bg-[#f8f9fb] p-3 rounded-xl border border-border">
-                            {globalCategory === 'fixed' && (
-                              <div className="mb-3">
-                                <TeethChart selectedTeeth={row.teethNo} onChange={teeth => updateRow(row.id, 'teethNo', teeth)} />
+                        <div className="p-4 space-y-4">
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            {addingMaterialRowId === row.id ? (
+                              <div className="flex gap-2 flex-[1.5]">
+                                <input autoFocus value={newMaterialName} onChange={e => setNewMaterialName(e.target.value)} placeholder="New Material..." className="w-full p-2 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600" />
+                                <button onClick={() => handleSaveNewMaterial(row.id)} className="bg-teal-600 text-white px-3 rounded-sm text-xs font-medium">Save</button>
+                                <button onClick={() => setAddingMaterialRowId(null)} className="bg-slate-100 border border-slate-200 text-slate-600 px-3 rounded-sm text-xs font-medium">Cancel</button>
                               </div>
+                            ) : (
+                              <select value={row.caseType} onChange={e => {
+                                if (e.target.value === '__NEW__') setAddingMaterialRowId(row.id)
+                                else updateRow(row.id, 'caseType', e.target.value)
+                              }} className="flex-[1.5] p-2 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 cursor-pointer">
+                                <option value="">— Select Case —</option>
+                                {caseTypes.map(c => <option key={c} value={c}>{c}</option>)}
+                                <option value="__NEW__" className="font-semibold text-teal-600 bg-teal-50">+ Add New Material</option>
+                              </select>
                             )}
-                            {globalCategory === 'removable' && (
-                              <div className="flex gap-2 mb-3">
-                                <button onClick={() => handleUpperLowerToggle(row.id, row, 'Upper')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${row.teethNo.includes('Upper') ? 'bg-red-50 border-2 border-primary text-primary' : 'bg-white border-2 border-border text-muted-foreground'}`}>Upper</button>
-                                <button onClick={() => handleUpperLowerToggle(row.id, row, 'Lower')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${row.teethNo.includes('Lower') ? 'bg-red-50 border-2 border-primary text-primary' : 'bg-white border-2 border-border text-muted-foreground'}`}>Lower</button>
-                              </div>
-                            )}
-                            
-                            <div className="flex flex-wrap gap-3 items-center">
-                              <div className="flex items-center gap-2 flex-1 min-w-[120px]">
-                                <span className="text-xs text-muted-foreground">Shade:</span>
-                                <input value={row.shade} onChange={e => updateRow(row.id, 'shade', e.target.value)} placeholder="e.g. A2" className="flex-1 p-2 bg-white border border-border rounded-lg text-sm outline-none focus:border-primary" />
-                              </div>
-                              <div className="flex items-center gap-2 w-24">
-                                <span className="text-xs text-muted-foreground">Qty:</span>
-                                <input type="number" min="1" value={row.quantity} onChange={e => updateRow(row.id, 'quantity', Number(e.target.value))} className="w-full p-2 bg-white border border-border rounded-lg text-sm outline-none focus:border-primary text-center font-bold" />
-                              </div>
-                              <div className="flex items-center gap-2 flex-[1.5] min-w-[140px]">
-                                <span className="text-xs text-muted-foreground">Unit Price:</span>
-                                <div className="flex-1 p-2 bg-white border border-border rounded-lg focus-within:border-primary">
-                                  <input type="number" value={row.unitPrice} onChange={e => updateRow(row.id, 'unitPrice', Number(e.target.value))} className="w-full text-sm outline-none text-right font-bold text-primary" />
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Anomaly Warning */}
-                            {isAnomaly && (
-                              <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-start gap-2">
-                                <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
-                                <div className="text-xs text-amber-700">
-                                  <strong>Cảnh báo:</strong> Giá tiền không khớp với bảng giá chuẩn (giá chuẩn: {new Intl.NumberFormat('vi-VN').format(standardPrice || 0)}). Đơn hàng sẽ được gắn cờ Anomaly.
-                                </div>
-                              </div>
-                            )}
+                            <input value={row.patientName} onChange={e => updateRow(row.id, 'patientName', e.target.value)} placeholder="Patient Name" className="flex-1 p-2 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600" />
                           </div>
-                        )}
 
-                        <input value={row.remark} onChange={e => updateRow(row.id, 'remark', e.target.value)} placeholder="Case specific remark (optional)..." className="w-full p-2.5 bg-[#f8f9fb] border border-border rounded-xl text-sm outline-none focus:border-primary" />
+                          {/* Teeth Section */}
+                          {row.caseType && (
+                            <div className="bg-slate-50 p-4 rounded-sm border border-slate-200">
+                              {globalCategory === 'fixed' && (
+                                <div className="mb-4">
+                                  <TeethChart selectedTeeth={row.teethNo} onChange={teeth => updateRow(row.id, 'teethNo', teeth)} />
+                                </div>
+                              )}
+                              {globalCategory === 'removable' && (
+                                <div className="flex gap-2 mb-4">
+                                  <button onClick={() => handleUpperLowerToggle(row.id, row, 'Upper')} className={`flex-1 py-2 rounded-sm text-xs font-medium transition-all border ${row.teethNo.includes('Upper') ? 'bg-teal-50 border-teal-600 text-teal-700' : 'bg-white border-slate-200 text-slate-500'}`}>Upper</button>
+                                  <button onClick={() => handleUpperLowerToggle(row.id, row, 'Lower')} className={`flex-1 py-2 rounded-sm text-xs font-medium transition-all border ${row.teethNo.includes('Lower') ? 'bg-teal-50 border-teal-600 text-teal-700' : 'bg-white border-slate-200 text-slate-500'}`}>Lower</button>
+                                </div>
+                              )}
+                              
+                              <div className="grid grid-cols-3 gap-4 items-center">
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase">Shade</span>
+                                  <input value={row.shade} onChange={e => updateRow(row.id, 'shade', e.target.value)} placeholder="e.g. A2" className="w-full p-2 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase">Qty</span>
+                                  <input type="number" min="1" value={row.quantity} onChange={e => updateRow(row.id, 'quantity', Number(e.target.value))} className="w-full p-2 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600 text-center" />
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-[10px] font-semibold text-slate-500 uppercase">Unit Price</span>
+                                  <div className="w-full flex items-center bg-white border border-slate-200 rounded-sm focus-within:border-teal-600 focus-within:ring-1 focus-within:ring-teal-600 overflow-hidden">
+                                    <span className="pl-2 text-slate-400 text-xs">₫</span>
+                                    <input type="number" value={row.unitPrice} onChange={e => updateRow(row.id, 'unitPrice', Number(e.target.value))} className="w-full p-2 text-sm outline-none text-right font-medium text-slate-800" />
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Anomaly Warning */}
+                              {isAnomaly && (
+                                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-sm p-3 flex items-start gap-2">
+                                  <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                                  <div className="text-xs text-amber-800">
+                                    <strong>Price Alert:</strong> The custom price differs from the standard pricelist ({new Intl.NumberFormat('vi-VN').format(standardPrice || 0)} ₫). This record will be marked as an anomaly.
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <input value={row.remark} onChange={e => updateRow(row.id, 'remark', e.target.value)} placeholder="Case specific remark (optional)..." className="w-full p-2 bg-white border border-slate-200 rounded-sm text-sm outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600" />
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+
               </div>
 
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 bg-secondary/30 border-t border-border flex gap-3 sticky bottom-0 z-10 rounded-b-2xl">
-              <button onClick={closeModal} className="flex-1 py-3 bg-secondary border border-border rounded-xl text-muted-foreground font-semibold hover:bg-muted transition-colors">Cancel</button>
-              <button onClick={handleSubmit} className="flex-[2] py-3 bg-primary rounded-xl text-primary-foreground font-bold hover:bg-primary/90 shadow-sm transition-all">
-                {editingEntryId ? 'Update Record' : '+ Add to Record'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              {/* Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 rounded-b-md">
+                <button onClick={closeModal} className="px-6 py-2 bg-white border border-slate-300 rounded-sm text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                <button onClick={handleSubmit} className="px-8 py-2 bg-teal-600 rounded-sm text-white text-sm font-medium hover:bg-teal-700 shadow-sm transition-all">
+                  {editingEntryId ? 'Update Record' : 'Save Record'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Delete Confirmation Modal */}
-      {entryToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center space-y-4">
-              <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto">
-                <AlertTriangle size={32} />
+      <AnimatePresence>
+        {entryToDelete && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-white rounded-md w-full max-w-sm overflow-hidden shadow-xl flex flex-col border border-slate-200"
+            >
+              <div className="p-6 text-center space-y-4">
+                <div className="w-12 h-12 bg-red-50 text-red-600 border border-red-100 rounded-full flex items-center justify-center mx-auto">
+                  <AlertTriangle size={24} />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900">Confirm Deletion</h3>
+                <p className="text-slate-500 text-sm">Are you sure you want to delete this record? This action cannot be undone.</p>
               </div>
-              <h3 className="text-xl font-bold text-foreground">Xác nhận xóa</h3>
-              <p className="text-muted-foreground text-sm">Bạn có chắc chắn muốn xóa record này không? Hành động này không thể hoàn tác.</p>
-            </div>
-            <div className="p-4 bg-secondary/30 border-t border-border flex gap-3">
-              <button onClick={() => setEntryToDelete(null)} className="flex-1 py-2.5 bg-white border border-border rounded-xl text-muted-foreground font-semibold hover:bg-[#f0f2f5] transition-colors">Hủy</button>
-              <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-500 border border-red-600 rounded-xl text-white font-bold hover:bg-red-600 shadow-sm transition-all">Xóa record</button>
-            </div>
-          </div>
-        </div>
-      )}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex gap-3">
+                <button onClick={() => setEntryToDelete(null)} className="flex-1 py-2 bg-white border border-slate-300 rounded-sm text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                <button onClick={confirmDelete} className="flex-1 py-2 bg-red-600 rounded-sm text-white text-sm font-medium hover:bg-red-700 shadow-sm transition-all">Delete</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
