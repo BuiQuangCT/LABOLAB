@@ -16,7 +16,7 @@ type CaseRow = {
   remark: string
 }
 
-type Clinic = { clinic: string, doctor: string }
+type Clinic = { clinic: string, doctor: string, address?: string, phone?: string, email?: string }
 type PriceItem = { item: string, category: string, price: number }
 
 const GROUP_A = ['Full Contour Zirconia','Multilayer Zirconia (4D Pro)','Porcelain Fused to Zirconia','Zirconia Veneer','Zirconia Post and Core','PMMA','PMMA Multilayer','Acrylic Teeth','Flexible Add One Unit','Flexible Base + One Unit','Upper Denture','Lower Denture','Upper Flexible','Lower Flexible']
