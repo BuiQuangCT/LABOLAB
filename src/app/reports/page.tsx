@@ -168,7 +168,6 @@ export default function ReportsPage() {
                 <h2 className="font-bold text-lg flex items-center gap-2">
                   <TrendingUp className="text-primary" /> Workload Forecasting (ML)
                 </h2>
-                <span className="text-xs font-medium px-2 py-1 bg-primary/10 text-primary rounded-md border border-primary/20">AI Powered</span>
               </div>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
