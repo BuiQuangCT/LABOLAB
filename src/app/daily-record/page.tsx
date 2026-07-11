@@ -341,10 +341,17 @@ export default function DailyRecordPage() {
   return (
     <div className="flex flex-col min-h-full pb-12 w-full">
       
-      {/* Top Header - Bleeds to edges */}
-      <div className="bg-red-950 text-white px-6 md:px-8 py-6 mb-6 -mx-4 md:-mx-8 -mt-4 md:-mt-8">
-        <h1 className="text-3xl font-serif tracking-tight">Daily Record</h1>
-        <p className="text-red-200 font-mono text-sm mt-1">{todayFormatted}</p>
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 mt-2">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">Daily Record</h1>
+          <p className="text-muted-foreground mt-1">Manage cases for {todayFormatted}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={openNewModal} className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground font-semibold rounded-xl hover:bg-primary/90 transition-colors shadow-sm">
+            <Plus size={18} /> New Record
+          </button>
+        </div>
       </div>
 
       <div className="w-full">
@@ -352,10 +359,8 @@ export default function DailyRecordPage() {
         <div className="bg-white rounded-t-2xl border border-border overflow-hidden">
           
           {/* Table Header Controls */}
-          <div className="bg-red-50 border-b border-red-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <span className="text-xs font-mono tracking-widest uppercase font-bold text-[#1a2035]">
-              Monthly Records
-            </span>
+          <div className="bg-secondary/30 border-b border-border px-6 py-5 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <h2 className="font-bold text-lg text-foreground font-serif">Monthly Records</h2>
             
             <div className="flex items-center gap-6">
               {/* Month Navigator */}
@@ -371,28 +376,24 @@ export default function DailyRecordPage() {
                 </button>
               </div>
 
-              {/* Add Record Button */}
-              <button onClick={openNewModal} className="bg-primary text-white px-4 py-2 rounded-lg font-semibold shadow-sm hover:bg-red-700 flex items-center gap-2 transition-all text-sm">
-                <Plus size={16} /> Add Record
-              </button>
             </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-[11px] text-white font-mono tracking-widest uppercase bg-red-950 border-b border-red-900">
+              <thead className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider bg-secondary/50 border-b border-border">
                 <tr>
-                  <th className="px-4 py-4 font-bold w-12 text-center">No</th>
-                  <th className="px-4 py-4 font-bold w-24">Date</th>
-                  <th className="px-4 py-4 font-bold w-40">Clinic</th>
-                  <th className="px-4 py-4 font-bold w-40">Doctor</th>
-                  <th className="px-4 py-4 font-bold w-40">Patient</th>
-                  <th className="px-4 py-4 font-bold min-w-[200px]">Case</th>
-                  <th className="px-4 py-4 font-bold w-20">Shade</th>
-                  <th className="px-4 py-4 font-bold w-32">Teeth No.</th>
-                  <th className="px-4 py-4 font-bold w-16 text-center">Qty</th>
-                  <th className="px-4 py-4 font-bold">Remark</th>
-                  <th className="px-4 py-4 font-bold w-20 text-center">Actions</th>
+                  <th className="px-5 py-4 w-12 text-center">No</th>
+                  <th className="px-5 py-4 w-24">Date</th>
+                  <th className="px-5 py-4 w-40">Clinic</th>
+                  <th className="px-5 py-4 w-40">Doctor</th>
+                  <th className="px-5 py-4 w-40">Patient</th>
+                  <th className="px-5 py-4 min-w-[200px]">Case</th>
+                  <th className="px-5 py-4 w-20">Shade</th>
+                  <th className="px-5 py-4 w-32">Teeth No.</th>
+                  <th className="px-5 py-4 w-16 text-center">Qty</th>
+                  <th className="px-5 py-4">Remark</th>
+                  <th className="px-5 py-4 w-20 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -402,31 +403,31 @@ export default function DailyRecordPage() {
                   initial={{ opacity: 0, y: 10 }} 
                   animate={{ opacity: 1, y: 0 }} 
                   transition={{ duration: 0.2, delay: Math.min(idx * 0.03, 0.5) }}
-                  className={`hover:bg-red-50 transition-colors ${entry.is_anomaly ? 'bg-amber-50' : ''}`}
+                  className={`hover:bg-muted/50 transition-colors border-b border-border/50 last:border-0 ${entry.is_anomaly ? 'bg-amber-50/50' : ''}`}
                 >
-                    <td className="px-4 py-3 text-center text-muted-foreground text-xs font-mono">{entries.length - idx}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{entry.date.split('-').slice(1).join('/') + '/' + entry.date.split('-')[0]}</td>
-                    <td className="px-4 py-3 font-medium text-foreground">{entry.clinicName}</td>
-                    <td className="px-4 py-3 text-foreground">{entry.doctorName || '-'}</td>
-                    <td className="px-4 py-3 font-medium text-foreground">{entry.patientName}</td>
-                    <td className="px-4 py-3 text-foreground">
+                    <td className="px-5 py-4 text-center text-muted-foreground text-xs font-mono">{entries.length - idx}</td>
+                    <td className="px-5 py-4 text-muted-foreground text-xs">{entry.date.split('-').slice(1).join('/') + '/' + entry.date.split('-')[0]}</td>
+                    <td className="px-5 py-4 font-medium text-foreground">{entry.clinicName}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{entry.doctorName || '-'}</td>
+                    <td className="px-5 py-4 font-medium text-foreground">{entry.patientName}</td>
+                    <td className="px-5 py-4 text-foreground">
                       {entry.caseType}
                       {entry.is_anomaly && (
-                        <span className="ml-2 inline-flex items-center text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Anomaly Detected">
-                          <AlertTriangle size={10} className="mr-0.5"/> Anomaly
+                        <span className="ml-2 inline-flex items-center text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md text-[10px] font-bold" title="Anomaly Detected">
+                          <AlertTriangle size={10} className="mr-1"/> Anomaly
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-foreground">{entry.shade || '-'}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-primary">{Array.isArray(entry.teethNo) ? entry.teethNo.join(' ') : (entry.teethNo || '-')}</td>
-                    <td className="px-4 py-3 text-center font-semibold text-foreground">{entry.quantity}</td>
-                    <td className="px-4 py-3 text-xs text-foreground truncate max-w-[200px]">{entry.remark || '-'}</td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-5 py-4 text-muted-foreground">{entry.shade || '-'}</td>
+                    <td className="px-5 py-4 font-mono text-xs text-primary bg-primary/5 rounded px-2">{Array.isArray(entry.teethNo) ? entry.teethNo.join(' ') : (entry.teethNo || '-')}</td>
+                    <td className="px-5 py-4 text-center font-semibold text-foreground">{entry.quantity}</td>
+                    <td className="px-5 py-4 text-xs text-muted-foreground truncate max-w-[200px]">{entry.remark || '-'}</td>
+                    <td className="px-5 py-4 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => handleEditEntry(entry)} className="p-1.5 text-blue-500 hover:bg-blue-50 hover:shadow-sm rounded-md transition-all" title="Edit">
+                        <button onClick={() => handleEditEntry(entry)} className="p-1.5 text-blue-500 hover:bg-blue-50 hover:shadow-sm rounded-md transition-colors" title="Edit">
                           <Edit size={16} />
                         </button>
-                        <button onClick={() => handleDeleteEntry(entry.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:shadow-sm rounded-md transition-all" title="Delete">
+                        <button onClick={() => handleDeleteEntry(entry.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 hover:shadow-sm rounded-md transition-colors" title="Delete">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -450,9 +451,9 @@ export default function DailyRecordPage() {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
             {/* Header */}
-            <div className="bg-red-950 text-red-200 px-6 py-4 font-mono text-xs tracking-[0.1em] uppercase flex justify-between items-center sticky top-0 z-10">
+            <div className="bg-secondary/50 text-foreground px-6 py-4 font-serif font-bold text-xl flex justify-between items-center sticky top-0 z-10 border-b border-border">
               <span>{editingEntryId ? 'Edit Entry' : 'New Entry'}</span>
-              <button onClick={closeModal} className="text-white hover:text-primary-foreground transition-colors p-1"><X size={18}/></button>
+              <button onClick={closeModal} className="text-muted-foreground hover:bg-muted p-1.5 rounded-lg transition-colors"><X size={20}/></button>
             </div>
 
             {/* Body */}
@@ -467,10 +468,10 @@ export default function DailyRecordPage() {
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">Category <span className="text-red-500">*</span></label>
                   <div className="flex gap-2">
-                    <button onClick={() => setGlobalCategory('fixed')} className={`flex-1 py-2 rounded-xl text-sm transition-all ${globalCategory === 'fixed' ? 'bg-red-50 border-2 border-primary text-primary font-bold' : 'bg-[#f8f9fb] border-2 border-border text-muted-foreground'}`}>
+                    <button onClick={() => setGlobalCategory('fixed')} className={`flex-1 py-2 rounded-xl text-sm transition-all border-2 ${globalCategory === 'fixed' ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' : 'bg-white border-transparent text-muted-foreground hover:bg-muted'}`}>
                       🔩 Fixed
                     </button>
-                    <button onClick={() => setGlobalCategory('removable')} className={`flex-1 py-2 rounded-xl text-sm transition-all ${globalCategory === 'removable' ? 'bg-red-50 border-2 border-primary text-primary font-bold' : 'bg-[#f8f9fb] border-2 border-border text-muted-foreground'}`}>
+                    <button onClick={() => setGlobalCategory('removable')} className={`flex-1 py-2 rounded-xl text-sm transition-all border-2 ${globalCategory === 'removable' ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' : 'bg-white border-transparent text-muted-foreground hover:bg-muted'}`}>
                       🦷 Removable
                     </button>
                   </div>
@@ -534,9 +535,9 @@ export default function DailyRecordPage() {
 
                   return (
                     <div key={row.id} className="border-2 border-primary rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-red-50 px-4 py-1.5 flex justify-between items-center border-b border-red-200">
+                      <div className="bg-primary/5 px-4 py-2 flex justify-between items-center border-b border-primary/20">
                         <span className="text-primary text-[11px] font-mono tracking-widest font-bold">CASE {idx + 1}</span>
-                        <button onClick={() => deleteRow(row.id)} className="text-red-400 hover:text-red-600 border border-red-400 rounded-md px-2 py-0.5 text-xs font-bold bg-white leading-none">−</button>
+                        <button onClick={() => deleteRow(row.id)} className="text-rose-500 hover:bg-rose-100 hover:text-rose-600 rounded-md p-1 px-2 text-xs font-bold bg-white shadow-sm border border-rose-200 leading-none transition-colors">Delete</button>
                       </div>
                       <div className="p-3 space-y-3 bg-white">
                         <div className="flex flex-col sm:flex-row gap-2">
@@ -614,8 +615,8 @@ export default function DailyRecordPage() {
 
             {/* Footer */}
             <div className="p-4 bg-secondary/30 border-t border-border flex gap-3 sticky bottom-0 z-10 rounded-b-2xl">
-              <button onClick={closeModal} className="flex-1 py-3 bg-[#f0f2f5] border border-border rounded-xl text-muted-foreground font-semibold hover:bg-[#e2e8f0] transition-colors">Cancel</button>
-              <button onClick={handleSubmit} className="flex-[2] py-3 bg-primary border border-red-700 rounded-xl text-white font-bold hover:bg-primary/90 shadow-md transition-all">
+              <button onClick={closeModal} className="flex-1 py-3 bg-secondary border border-border rounded-xl text-muted-foreground font-semibold hover:bg-muted transition-colors">Cancel</button>
+              <button onClick={handleSubmit} className="flex-[2] py-3 bg-primary rounded-xl text-primary-foreground font-bold hover:bg-primary/90 shadow-sm transition-all">
                 {editingEntryId ? 'Update Record' : '+ Add to Record'}
               </button>
             </div>

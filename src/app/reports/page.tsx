@@ -86,9 +86,9 @@ export default function ReportsPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard & Reports</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">Dashboard & Reports</h1>
           <p className="text-muted-foreground mt-1">Analytics and machine learning insights</p>
         </div>
         <div className="flex bg-white p-2 rounded-xl shadow-sm border border-border">

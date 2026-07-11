@@ -191,19 +191,19 @@ export default function ClinicsAndPricePage() {
     <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Master Data</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">Master Data</h1>
           <p className="text-muted-foreground mt-1">Manage your clinics and price lists</p>
         </div>
         <div className="flex bg-white p-1 rounded-xl shadow-sm border border-border w-full sm:w-auto">
           <button 
             onClick={() => setActiveTab('clinics')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'clinics' ? 'bg-primary text-white shadow-md' : 'text-muted-foreground hover:bg-secondary'}`}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'clinics' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary'}`}
           >
             <Building size={16} /> Clinics
           </button>
           <button 
             onClick={() => setActiveTab('pricelist')}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'pricelist' ? 'bg-primary text-white shadow-md' : 'text-muted-foreground hover:bg-secondary'}`}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'pricelist' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary'}`}
           >
             <Tags size={16} /> Price List
           </button>
@@ -224,7 +224,7 @@ export default function ClinicsAndPricePage() {
           </div>
           <button 
             onClick={() => activeTab === 'clinics' ? setShowClinicForm(!showClinicForm) : setShowPriceForm(!showPriceForm)}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-white font-medium rounded-xl hover:bg-primary/90 transition-all shadow-sm"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground font-semibold rounded-xl hover:bg-primary/90 transition-all shadow-sm"
           >
             <Plus size={18} /> Add New {activeTab === 'clinics' ? 'Clinic' : 'Item'}
           </button>

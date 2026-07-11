@@ -41,23 +41,28 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex print:block h-screen print:h-auto bg-secondary/30 print:bg-white">
-      <aside className="hidden md:flex print:hidden w-64 flex-col bg-white border-r shadow-sm z-10">
+      <aside className="hidden md:flex print:hidden w-64 flex-col bg-white border-r border-border/50 shadow-sm z-10">
         <div className="p-6">
-          <Link href="/"><h1 className="text-2xl font-bold text-primary tracking-tight">LaboLab</h1></Link>
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+              <span className="text-primary-foreground font-bold text-lg leading-none font-serif">L</span>
+            </div>
+            <h1 className="text-xl font-bold text-foreground tracking-tight font-serif">LaboLab</h1>
+          </Link>
         </div>
         <nav className="flex-1 px-4 space-y-2 mt-4">
           {navItems.map((item) => {
             const isActive = item.path === '/' ? pathname === '/' : pathname.startsWith(item.path)
             return (
-              <Link key={item.path} href={item.path} className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isActive ? 'bg-primary text-primary-foreground shadow-md' : 'hover:bg-primary hover:text-primary-foreground hover:shadow-md hover:-translate-y-0.5 text-foreground'}`}>
-                <item.icon size={20} />
-                <span className="font-medium">{item.name}</span>
+              <Link key={item.path} href={item.path} className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${isActive ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                <item.icon size={20} className={isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground transition-colors'} />
+                <span>{item.name}</span>
               </Link>
             )
           })}
         </nav>
-        <div className="p-4 border-t">
-          <button onClick={handleLogout} className="flex items-center justify-center gap-3 p-3 rounded-lg bg-red-50 border border-red-200 hover:bg-red-100 text-red-600 font-bold w-full transition-all shadow-sm">
+        <div className="p-4 border-t border-border/50">
+          <button onClick={handleLogout} className="flex items-center justify-center gap-3 p-3 rounded-xl bg-destructive/5 text-destructive hover:bg-destructive/10 font-medium w-full transition-colors">
             <LogOut size={20} />
             <span>Logout</span>
           </button>
@@ -70,9 +75,14 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
              <button onClick={() => setIsMobileMenuOpen(true)} className="text-muted-foreground hover:bg-secondary p-2 rounded-md transition-colors">
                <Menu size={24} />
              </button>
-             <Link href="/" className="text-primary font-bold text-xl">LaboLab</Link>
+             <Link href="/" className="flex items-center gap-2">
+               <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
+                 <span className="text-primary-foreground font-bold text-sm leading-none font-serif">L</span>
+               </div>
+               <span className="text-foreground font-bold text-lg font-serif">LaboLab</span>
+             </Link>
            </div>
-           <button onClick={handleLogout} className="text-red-500 bg-red-50 border border-red-200 hover:bg-red-100 hover:text-red-600 p-2 rounded-lg transition-all shadow-sm flex items-center gap-2"><LogOut size={18} /><span className="text-sm font-bold">Logout</span></button>
+           <button onClick={handleLogout} className="text-destructive bg-destructive/5 hover:bg-destructive/10 p-2 rounded-lg transition-colors flex items-center gap-2"><LogOut size={18} /></button>
         </header>
         <main className="flex-1 overflow-auto print:overflow-visible p-4 md:p-8 print:p-0 animate-in slide-in-from-bottom-4 fade-in duration-300">
           {children}
@@ -94,15 +104,15 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
               {navItems.map((item) => {
                 const isActive = item.path === '/' ? pathname === '/' : pathname.startsWith(item.path)
                 return (
-                  <Link key={item.path} href={item.path} className={`flex items-center gap-3 p-4 rounded-lg transition-all ${isActive ? 'bg-primary text-primary-foreground shadow-md' : 'hover:bg-primary hover:text-primary-foreground hover:shadow-md hover:-translate-y-0.5 text-foreground'}`}>
-                    <item.icon size={22} />
-                    <span className="font-medium text-base">{item.name}</span>
+                  <Link key={item.path} href={item.path} onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-3 p-4 rounded-xl transition-all duration-200 ${isActive ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                    <item.icon size={22} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
+                    <span className="text-base">{item.name}</span>
                   </Link>
                 )
               })}
             </nav>
-            <div className="p-4 border-t">
-              <button onClick={handleLogout} className="flex items-center justify-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 text-red-600 font-bold w-full transition-all shadow-sm">
+            <div className="p-4 border-t border-border/50">
+              <button onClick={handleLogout} className="flex items-center justify-center gap-3 p-4 rounded-xl bg-destructive/5 text-destructive hover:bg-destructive/10 font-medium w-full transition-colors">
                 <LogOut size={22} />
                 <span className="text-base">Logout</span>
               </button>

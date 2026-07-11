@@ -158,14 +158,14 @@ export default function VoucherPage() {
           {/* Summary */}
           {!loading && vouchers.length > 0 && (
             <div className="grid grid-cols-2 gap-2 p-3 bg-white border-b border-border">
-              <div className="bg-red-50 p-2.5 rounded-xl border border-red-200">
-                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Collected</div>
+              <div className="bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100">
+                <div className="text-[10px] text-emerald-600 uppercase font-bold tracking-wider mb-1">Collected</div>
                 <div className="text-sm font-bold text-emerald-700">
                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(vouchers.filter(v => v.isPaid).reduce((sum, v) => sum + v.totalAmount, 0))}
                 </div>
               </div>
-              <div className="bg-rose-50 p-2.5 rounded-xl border border-rose-100">
-                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Unpaid</div>
+              <div className="bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                <div className="text-[10px] text-rose-600 uppercase font-bold tracking-wider mb-1">Unpaid</div>
                 <div className="text-sm font-bold text-rose-700">
                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(vouchers.filter(v => !v.isPaid).reduce((sum, v) => sum + v.totalAmount, 0))}
                 </div>
@@ -252,9 +252,9 @@ export default function VoucherPage() {
                   )}
 
                   {/* Header */}
-                  <div className="flex justify-between items-start border-b-2 border-primary pb-6">
+                  <div className="flex justify-between items-start border-b-2 border-border pb-6">
                     <div>
-                      <h1 className="text-3xl font-extrabold text-primary tracking-tight font-serif">{labInfo?.name || 'DENTAL LAB'}</h1>
+                      <h1 className="text-3xl font-extrabold text-foreground tracking-tight font-serif">{labInfo?.name || 'DENTAL LAB'}</h1>
                       <div className="mt-2 text-sm text-muted-foreground space-y-1">
                         <p>{labInfo?.address}</p>
                         <p>Phone: {labInfo?.phone}</p>
