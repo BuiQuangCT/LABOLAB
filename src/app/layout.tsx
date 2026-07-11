@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { DM_Sans, DM_Serif_Display, DM_Mono } from "next/font/google";
+﻿import type { Metadata } from "next";
+import { DM_Sans, DM_Serif_Display, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -13,7 +13,7 @@ const dmSerif = DM_Serif_Display({
   subsets: ["latin"],
 });
 
-const dmMono = DM_Mono({
+const dmMono = Space_Grotesk({
   variable: "--font-mono",
   weight: ["400", "500"],
   subsets: ["latin"],
@@ -21,7 +21,7 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   title: "LaboLab - Dental Lab Management",
-  description: "Phần mềm quản lý hoạt động Lab Nha khoa tích hợp AI",
+  description: "Pháº§n má»m quáº£n lÃ½ hoáº¡t Ä‘á»™ng Lab Nha khoa tÃ­ch há»£p AI",
 };
 
 import { AuthProvider } from "@/components/AuthProvider";
