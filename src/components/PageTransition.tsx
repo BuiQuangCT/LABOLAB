@@ -7,7 +7,7 @@ export function PageTransition({ children, className = '' }: { children: ReactNo
   return (
     <motion.div
       initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: 1, y: 0, transitionEnd: { transform: "none" } }}
       exit={{ opacity: 0, y: -15 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={className}

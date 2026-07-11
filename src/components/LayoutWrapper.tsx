@@ -40,8 +40,8 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
 
   return (
-    <div className="flex h-screen bg-secondary/30">
-      <aside className="hidden md:flex w-64 flex-col bg-white border-r shadow-sm z-10">
+    <div className="flex h-screen print:h-auto bg-secondary/30 print:bg-white">
+      <aside className="hidden md:flex print:hidden w-64 flex-col bg-white border-r shadow-sm z-10">
         <div className="p-6">
           <Link href="/"><h1 className="text-2xl font-bold text-primary tracking-tight">LaboLab</h1></Link>
         </div>
@@ -64,8 +64,8 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <header className="flex md:hidden items-center justify-between p-4 bg-white border-b shadow-sm z-10">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible relative">
+        <header className="flex md:hidden print:hidden items-center justify-between p-4 bg-white border-b shadow-sm z-10">
            <div className="flex items-center gap-3">
              <button onClick={() => setIsMobileMenuOpen(true)} className="text-muted-foreground hover:bg-secondary p-2 rounded-md transition-colors">
                <Menu size={24} />
@@ -74,7 +74,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
            </div>
            <button onClick={handleLogout} className="text-red-500 bg-red-50 border border-red-200 hover:bg-red-100 hover:text-red-600 p-2 rounded-lg transition-all shadow-sm flex items-center gap-2"><LogOut size={18} /><span className="text-sm font-bold">Logout</span></button>
         </header>
-        <main className="flex-1 overflow-auto p-4 md:p-8 animate-in slide-in-from-bottom-4 fade-in duration-300">
+        <main className="flex-1 overflow-auto print:overflow-visible p-4 md:p-8 print:p-0 animate-in slide-in-from-bottom-4 fade-in duration-300">
           {children}
         </main>
       </div>
