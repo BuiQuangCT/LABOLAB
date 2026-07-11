@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Calendar, Building2, Receipt, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Calendar, Building2, Receipt, TrendingUp, AlertTriangle, Plus, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
     todayCases: 0,
+    monthlyCases: 0,
     monthlyRevenue: 0,
     totalClinics: 0
   })
@@ -38,12 +39,14 @@ export default function Dashboard() {
 
         if (entries) {
           const todayCases = entries.filter(e => e.date === todayStr).length
+          const monthlyCases = entries.filter(e => e.date.startsWith(monthStr)).length
           const monthlyRevenue = entries
             .filter(e => e.date.startsWith(monthStr))
             .reduce((sum, e) => sum + (e.unitPrice * e.quantity), 0)
 
           setStats({
             todayCases,
+            monthlyCases,
             monthlyRevenue,
             totalClinics: clinics ? new Set(clinics.map(c => c.clinic)).size : 0
           })
@@ -70,45 +73,71 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-border">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-border">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
           <p className="text-muted-foreground text-sm mt-1">Welcome back! Here is your lab's performance overview.</p>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/daily-record" className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 font-bold rounded-lg hover:bg-red-100 border border-red-200 transition-colors text-sm shadow-sm">
+            <Plus size={16} /> New Record
+          </Link>
+          <Link href="/voucher" className="flex items-center gap-2 px-4 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary/90 transition-colors text-sm shadow-sm">
+            <Receipt size={16} /> Vouchers
+          </Link>
+        </div>
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-border flex flex-col hover:border-primary transition-colors">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-primary/10 rounded-xl">
+            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
               <Calendar size={24} className="text-primary" />
             </div>
-            <h3 className="font-mono text-xs tracking-widest uppercase text-muted-foreground font-semibold">Cases Today</h3>
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cases Today</h2>
           </div>
-          <div className="text-4xl font-bold text-foreground">{stats.todayCases}</div>
+          <div className="mt-auto">
+            <span className="text-3xl font-extrabold text-foreground">{stats.todayCases}</span>
+          </div>
         </div>
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-border flex flex-col hover:border-primary transition-colors">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-primary/10 rounded-xl">
+            <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+              <ClipboardList size={24} className="text-blue-600" />
+            </div>
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Cases This Month</h2>
+          </div>
+          <div className="mt-auto">
+            <span className="text-3xl font-extrabold text-foreground">{stats.monthlyCases}</span>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-border flex flex-col hover:border-primary transition-colors">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
               <TrendingUp size={24} className="text-primary" />
             </div>
-            <h3 className="font-mono text-xs tracking-widest uppercase text-muted-foreground font-semibold">Revenue ({new Date().toLocaleString('en-US', { month: 'short' })})</h3>
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Revenue ({new Date().toLocaleString('en-US', { month: 'short' })})</h2>
           </div>
-          <div className="text-3xl font-bold text-foreground">
-            {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.monthlyRevenue)}
+          <div className="mt-auto">
+            <span className="text-3xl font-extrabold text-foreground">
+              {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(stats.monthlyRevenue)}
+            </span>
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-border flex flex-col hover:border-primary transition-colors">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-3 bg-primary/10 rounded-xl">
+            <div className="p-3 bg-red-50 rounded-xl border border-red-100">
               <Building2 size={24} className="text-primary" />
             </div>
-            <h3 className="font-mono text-xs tracking-widest uppercase text-muted-foreground font-semibold">Total Clinics</h3>
+            <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Clinics</h2>
           </div>
-          <div className="text-4xl font-bold text-foreground">{stats.totalClinics}</div>
+          <div className="mt-auto">
+            <span className="text-3xl font-extrabold text-foreground">{stats.totalClinics}</span>
+          </div>
         </div>
       </div>
 
