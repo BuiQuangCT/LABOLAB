@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Printer, CheckCircle2, Building, Calendar as CalendarIcon, Loader2, XCircle } from 'lucide-react'
+import { Printer, CheckCircle2, Building, Calendar as CalendarIcon, Loader2, XCircle, AlertTriangle } from 'lucide-react'
 
 type Entry = {
   id: string
@@ -10,10 +10,10 @@ type Entry = {
   doctorName: string
   patientName: string
   caseType: string
-  teethNo: string
+  teethNo: string[]
   quantity: number
   unitPrice: number
-  payments?: { paid: string }[]
+  is_paid: boolean
 }
 
 type GroupedVoucher = {
@@ -31,6 +31,7 @@ export default function VoucherPage() {
   const [labInfo, setLabInfo] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [selectedVoucher, setSelectedVoucher] = useState<GroupedVoucher | null>(null)
+  const [paymentConfirmModal, setPaymentConfirmModal] = useState<{ voucher: GroupedVoucher, newStatus: string } | null>(null)
 
   useEffect(() => {
     fetchVouchers()
@@ -47,13 +48,10 @@ export default function VoucherPage() {
     const startOfMonth = `${month}-01`
     const endOfMonth = new Date(new Date(startOfMonth).getFullYear(), new Date(startOfMonth).getMonth() + 1, 0).toISOString().split('T')[0]
 
-    // Fetch entries with their payments
+    // Fetch entries
     const { data: entriesData } = await supabase
       .from('entries')
-      .select(`
-        *,
-        payments ( paid )
-      `)
+      .select('*')
       .gte('date', startOfMonth)
       .lte('date', endOfMonth)
 
@@ -75,8 +73,7 @@ export default function VoucherPage() {
         acc[key].totalAmount += (entry.unitPrice * entry.quantity)
         
         // If any entry is unpaid, the whole voucher is considered unpaid
-        const isEntryPaid = entry.payments && entry.payments.length > 0 && entry.payments[0].paid === '1'
-        if (!isEntryPaid) {
+        if (!entry.is_paid) {
           acc[key].isPaid = false
         }
         
@@ -106,20 +103,27 @@ export default function VoucherPage() {
     setLoading(false)
   }
 
-  const togglePaymentStatus = async (voucher: GroupedVoucher, newStatus: string) => {
-    const isPaying = newStatus === '1'
-    if (!confirm(`Are you sure you want to mark these items as ${isPaying ? 'paid' : 'unpaid'}?`)) return
-    
+  const togglePaymentStatus = (voucher: GroupedVoucher, newStatus: string) => {
+    setPaymentConfirmModal({ voucher, newStatus })
+  }
+
+  const confirmTogglePayment = async () => {
+    if (!paymentConfirmModal) return
+    const { voucher, newStatus } = paymentConfirmModal
     const entryIds = voucher.entries.map(e => e.id)
     
-    // Insert/Update into payments table
-    const paymentsPayload = entryIds.map(id => ({
-      entryId: id,
-      paid: newStatus
-    }))
+    if (entryIds.length === 0) return
     
-    await supabase.from('payments').upsert(paymentsPayload, { onConflict: 'entryId' })
+    // Update is_paid on entries table directly
+    const isPaidValue = newStatus === '1'
+    const { error } = await supabase.from('entries').update({ is_paid: isPaidValue }).in('id', entryIds)
     
+    if (error) {
+      console.error("Payment update error:", error)
+      alert("Lỗi cập nhật: " + error.message)
+    }
+    
+    setPaymentConfirmModal(null)
     fetchVouchers() // Refresh
   }
 
@@ -150,6 +154,25 @@ export default function VoucherPage() {
           <div className="p-4 border-b border-border bg-secondary/30 flex justify-between items-center">
             <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Vouchers ({vouchers.length})</h2>
           </div>
+          
+          {/* Summary */}
+          {!loading && vouchers.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 p-3 bg-white border-b border-border">
+              <div className="bg-red-50 p-2.5 rounded-xl border border-red-200">
+                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Collected</div>
+                <div className="text-sm font-bold text-emerald-700">
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(vouchers.filter(v => v.isPaid).reduce((sum, v) => sum + v.totalAmount, 0))}
+                </div>
+              </div>
+              <div className="bg-rose-50 p-2.5 rounded-xl border border-rose-100">
+                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mb-1">Unpaid</div>
+                <div className="text-sm font-bold text-rose-700">
+                  {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(vouchers.filter(v => !v.isPaid).reduce((sum, v) => sum + v.totalAmount, 0))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-3">
             {loading ? (
               <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-primary" /></div>
@@ -273,7 +296,7 @@ export default function VoucherPage() {
                           <td className="py-4 px-2 font-medium">{entry.patientName}</td>
                           <td className="py-4 px-2">
                             <div className="font-semibold">{entry.caseType}</div>
-                            <div className="text-xs text-muted-foreground mt-0.5 font-mono">Teeth: {entry.teethNo || 'N/A'}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5 font-mono">Teeth: {Array.isArray(entry.teethNo) && entry.teethNo.length > 0 ? entry.teethNo.join(', ') : 'N/A'}</div>
                           </td>
                           <td className="py-4 px-2 text-center">{entry.quantity}</td>
                           <td className="py-4 px-2 text-right text-muted-foreground">
@@ -312,6 +335,27 @@ export default function VoucherPage() {
           )}
         </div>
       </div>
+
+      {/* Payment Confirmation Modal */}
+      {paymentConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200 print:hidden">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center space-y-4">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${paymentConfirmModal.newStatus === '1' ? 'bg-emerald-100 text-emerald-500' : 'bg-rose-100 text-rose-500'}`}>
+                {paymentConfirmModal.newStatus === '1' ? <CheckCircle2 size={32} /> : <XCircle size={32} />}
+              </div>
+              <h3 className="text-xl font-bold text-foreground">Xác nhận</h3>
+              <p className="text-muted-foreground text-sm">
+                Bạn có chắc chắn muốn đánh dấu hóa đơn của <strong>{paymentConfirmModal.voucher.clinicName}</strong> là <strong className={paymentConfirmModal.newStatus === '1' ? 'text-emerald-600' : 'text-rose-600'}>{paymentConfirmModal.newStatus === '1' ? 'PAID' : 'UNPAID'}</strong> không?
+              </p>
+            </div>
+            <div className="p-4 bg-secondary/30 border-t border-border flex gap-3">
+              <button onClick={() => setPaymentConfirmModal(null)} className="flex-1 py-2.5 bg-white border border-border rounded-xl text-muted-foreground font-semibold hover:bg-[#f0f2f5] transition-colors">Hủy</button>
+              <button onClick={confirmTogglePayment} className={`flex-1 py-2.5 rounded-xl text-white font-bold shadow-sm transition-all ${paymentConfirmModal.newStatus === '1' ? 'bg-emerald-500 hover:bg-emerald-600 border border-emerald-600' : 'bg-rose-500 hover:bg-rose-600 border border-rose-600'}`}>Xác nhận</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print Styles */}
       <style dangerouslySetInnerHTML={{__html: `

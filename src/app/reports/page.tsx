@@ -12,7 +12,7 @@ type Entry = {
   quantity: number
   unitPrice: number
   is_anomaly: boolean
-  payments: { paid: string }[]
+  is_paid: boolean
 }
 
 export default function ReportsPage() {
@@ -33,7 +33,7 @@ export default function ReportsPage() {
     const endOfMonth = new Date(new Date(startOfMonth).getFullYear(), new Date(startOfMonth).getMonth() + 1, 0).toISOString().split('T')[0]
 
     const [entriesRes, forecastRes] = await Promise.all([
-      supabase.from('entries').select('*, payments(paid)').gte('date', startOfMonth).lte('date', endOfMonth).order('date', { ascending: false }),
+      supabase.from('entries').select('*').gte('date', startOfMonth).lte('date', endOfMonth).order('date', { ascending: false }),
       supabase.from('predictions').select('*').order('prediction_date', { ascending: true })
     ])
 
@@ -46,7 +46,7 @@ export default function ReportsPage() {
   // Calculate KPIs
   const totalCases = entries.reduce((sum, e) => sum + e.quantity, 0)
   const totalRevenue = entries.reduce((sum, e) => sum + (e.quantity * e.unitPrice), 0)
-  const collectedRevenue = entries.filter(e => e.payments?.[0]?.paid === '1').reduce((sum, e) => sum + (e.quantity * e.unitPrice), 0)
+  const collectedRevenue = entries.filter(e => e.is_paid).reduce((sum, e) => sum + (e.quantity * e.unitPrice), 0)
   const outstandingRevenue = totalRevenue - collectedRevenue
 
   // Chart Data Preparation (Revenue by Clinic)
@@ -216,7 +216,7 @@ export default function ReportsPage() {
                         <div className="text-xs text-muted-foreground mt-0.5">Qty: {entry.quantity}</div>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        {entry.payments?.[0]?.paid === '1' ? (
+                        {entry.is_paid ? (
                           <span className="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full text-xs font-medium">Paid</span>
                         ) : (
                           <span className="bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full text-xs font-medium">Unpaid</span>

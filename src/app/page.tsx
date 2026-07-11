@@ -28,6 +28,7 @@ export default function Dashboard() {
           .from('entries')
           .select('*')
           .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
           .limit(100)
 
         // Fetch total unique clinics
@@ -121,42 +122,45 @@ export default function Dashboard() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-foreground uppercase bg-white border-b border-border">
+            <thead className="text-[11px] text-white font-mono tracking-widest uppercase bg-red-950 border-b border-red-900">
               <tr>
-                <th className="px-5 py-3 font-semibold">Date</th>
-                <th className="px-5 py-3 font-semibold">Clinic & Doctor</th>
-                <th className="px-5 py-3 font-semibold">Patient</th>
-                <th className="px-5 py-3 font-semibold">Case Type</th>
-                <th className="px-5 py-3 font-semibold text-right">Amount</th>
+                <th className="px-4 py-4 font-bold w-12 text-center">No</th>
+                <th className="px-4 py-4 font-bold w-24">Date</th>
+                <th className="px-4 py-4 font-bold w-40">Clinic</th>
+                <th className="px-4 py-4 font-bold w-40">Doctor</th>
+                <th className="px-4 py-4 font-bold w-40">Patient</th>
+                <th className="px-4 py-4 font-bold min-w-[200px]">Case</th>
+                <th className="px-4 py-4 font-bold w-20">Shade</th>
+                <th className="px-4 py-4 font-bold w-32">Teeth No.</th>
+                <th className="px-4 py-4 font-bold w-16 text-center">Qty</th>
+                <th className="px-4 py-4 font-bold">Remark</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {recentEntries.map((entry) => (
-                <tr key={entry.id} className={`hover:bg-[#f8f9fb] transition-colors ${entry.is_anomaly ? 'bg-amber-50/50' : ''}`}>
-                  <td className="px-5 py-3 font-mono text-xs text-muted-foreground">
-                    {entry.date.split('-').slice(1).join('/')}
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="font-semibold text-foreground">{entry.clinicName}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{entry.doctorName || '-'}</div>
-                  </td>
-                  <td className="px-5 py-3 font-medium">{entry.patientName}</td>
-                  <td className="px-5 py-3">
-                    <span className="font-semibold text-primary text-xs bg-primary/5 px-2 py-1 rounded-md">{entry.caseType}</span>
+              {recentEntries.map((entry, idx) => (
+                <tr key={entry.id} className={`hover:bg-red-50 transition-colors ${entry.is_anomaly ? 'bg-amber-50' : ''}`}>
+                  <td className="px-4 py-3 text-center text-muted-foreground text-xs font-mono">{idx + 1}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{entry.date.split('-').slice(1).join('/') + '/' + entry.date.split('-')[0]}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">{entry.clinicName}</td>
+                  <td className="px-4 py-3 text-foreground">{entry.doctorName || '-'}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">{entry.patientName}</td>
+                  <td className="px-4 py-3 text-foreground">
+                    {entry.caseType}
                     {entry.is_anomaly && (
-                      <span className="ml-2 inline-flex items-center text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                      <span className="ml-2 inline-flex items-center text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Anomaly Detected">
                         <AlertTriangle size={10} className="mr-0.5"/> Anomaly
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-3 text-right font-bold text-foreground">
-                    {new Intl.NumberFormat('vi-VN').format(entry.unitPrice * entry.quantity)}
-                  </td>
+                  <td className="px-4 py-3 text-foreground">{entry.shade || '-'}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-primary">{Array.isArray(entry.teethNo) ? entry.teethNo.join(' ') : (entry.teethNo || '-')}</td>
+                  <td className="px-4 py-3 text-center font-semibold text-foreground">{entry.quantity}</td>
+                  <td className="px-4 py-3 text-xs text-foreground truncate max-w-[200px]">{entry.remark || '-'}</td>
                 </tr>
               ))}
               {recentEntries.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground text-sm font-mono">
+                  <td colSpan={10} className="px-5 py-8 text-center text-muted-foreground text-sm font-mono">
                     No recent activity found.
                   </td>
                 </tr>

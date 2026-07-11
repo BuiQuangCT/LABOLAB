@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { TeethChart } from '@/components/TeethChart'
-import { Plus, AlertTriangle, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, AlertTriangle, X, ChevronLeft, ChevronRight, Trash2, Edit } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 type CaseRow = {
   id: string
@@ -28,6 +29,8 @@ export default function DailyRecordPage() {
   // Month selector state
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
+  const [entryToDelete, setEntryToDelete] = useState<string | null>(null)
   const [globalCategory, setGlobalCategory] = useState<'fixed' | 'removable'>('fixed')
   const [clinicName, setClinicName] = useState('')
   const [doctorName, setDoctorName] = useState('')
@@ -104,9 +107,62 @@ export default function DailyRecordPage() {
     }])
   }
 
-  const openModal = () => {
-    if (rows.length === 0) addEmptyRow()
+  const openNewModal = () => {
+    setEditingEntryId(null)
+    setDate(new Date().toISOString().split('T')[0])
+    setClinicName('')
+    setDoctorName('')
+    setRows([{
+      id: Math.random().toString(36).substr(2, 9),
+      caseType: '',
+      patientName: '',
+      shade: '',
+      teethNo: [],
+      quantity: 1,
+      unitPrice: 0,
+      remark: ''
+    }])
     setIsModalOpen(true)
+  }
+
+  const handleEditEntry = (entry: any) => {
+    setEditingEntryId(entry.id)
+    setDate(entry.date)
+    setClinicName(entry.clinicName)
+    setDoctorName(entry.doctorName || '')
+    const priceItem = priceList.find(p => p.item === entry.caseType)
+    if (priceItem) {
+      setGlobalCategory(priceItem.category as 'fixed' | 'removable')
+    } else {
+      setGlobalCategory('fixed')
+    }
+    
+    setRows([{
+      id: Math.random().toString(36).substr(2, 9),
+      caseType: entry.caseType,
+      patientName: entry.patientName,
+      shade: entry.shade || '',
+      teethNo: Array.isArray(entry.teethNo) ? entry.teethNo : [],
+      quantity: entry.quantity,
+      unitPrice: entry.unitPrice,
+      remark: entry.remark || ''
+    }])
+    setIsModalOpen(true)
+  }
+
+  const handleDeleteEntry = (id: string) => {
+    setEntryToDelete(id)
+  }
+
+  const confirmDelete = async () => {
+    if (!entryToDelete) return
+    const { error } = await supabase.from('entries').delete().eq('id', entryToDelete)
+    if (error) {
+      alert("Lỗi khi xóa: " + error.message)
+    } else {
+      setEntries(prev => prev.filter(e => e.id !== entryToDelete))
+      setEntryToDelete(null)
+    }
   }
 
   const closeModal = () => {
@@ -160,32 +216,69 @@ export default function DailyRecordPage() {
       return
     }
 
-    const payload = rows.map(row => ({
-      date,
-      clinicName,
-      doctorName,
-      patientName: row.patientName,
-      caseType: row.caseType,
-      shade: row.shade,
-      teethNo: row.teethNo.join(' '),
-      quantity: row.quantity,
-      unitPrice: row.unitPrice,
-      remark: row.remark,
-    }))
+    if (editingEntryId) {
+      const row = rows[0]
+      const standardPrice = priceList.find(p => p.item === row.caseType)?.price || 0
+      const is_anomaly = row.unitPrice !== standardPrice
 
-    const { data, error } = await supabase.from('entries').insert(payload).select()
-    if (error) {
-      alert("Error saving record: " + error.message)
-    } else {
-      alert("Record saved successfully!")
-      // Refresh current month data if the new entry belongs to the selected month
-      const entryMonth = new Date(date).getMonth()
-      const entryYear = new Date(date).getFullYear()
-      if (entryMonth === selectedMonth.getMonth() && entryYear === selectedMonth.getFullYear()) {
-         setEntries(prev => [...(data || []), ...prev])
+      const payload = {
+        date,
+        clinicName,
+        doctorName,
+        patientName: row.patientName,
+        caseType: row.caseType,
+        shade: row.shade,
+        teethNo: row.teethNo,
+        quantity: row.quantity,
+        unitPrice: row.unitPrice,
+        remark: row.remark,
+        is_anomaly
       }
-      setRows([])
-      closeModal()
+      const { data, error } = await supabase.from('entries').update(payload).eq('id', editingEntryId).select()
+      if (error) {
+        alert("Error updating record: " + error.message)
+      } else {
+        alert("Record updated successfully!")
+        setEntries(prev => prev.map(e => e.id === editingEntryId ? (data?.[0] || e) : e))
+        closeModal()
+      }
+    } else {
+      const payload = rows.map(row => {
+        const standardPrice = priceList.find(p => p.item === row.caseType)?.price || 0
+        const is_anomaly = row.unitPrice !== standardPrice
+        
+        return {
+          date,
+          clinicName,
+          doctorName,
+          patientName: row.patientName,
+          caseType: row.caseType,
+          shade: row.shade,
+          teethNo: row.teethNo,
+          quantity: row.quantity,
+          unitPrice: row.unitPrice,
+          remark: row.remark,
+          is_anomaly
+        }
+      })
+
+      const { data, error } = await supabase.from('entries').insert(payload).select()
+      if (error) {
+        alert("Error saving record: " + error.message)
+      } else {
+        alert("Record saved successfully!")
+        // Refresh current month data if the new entry belongs to the selected month
+        const entryMonth = new Date(date).getMonth()
+        const entryYear = new Date(date).getFullYear()
+        if (entryMonth === selectedMonth.getMonth() && entryYear === selectedMonth.getFullYear()) {
+           setEntries(prev => {
+             const updated = [...(data || []), ...prev]
+             return updated.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+           })
+        }
+        setRows([])
+        closeModal()
+      }
     }
   }
 
@@ -210,7 +303,18 @@ export default function DailyRecordPage() {
       return
     }
     const docName = newDoctorName.trim()
-    const { data, error } = await supabase.from('clinics').insert({ clinic: clinicName, doctor: docName }).select().single()
+    
+    // Tìm clinic hiện tại để sao chép địa chỉ, sđt, email
+    const existingClinic = clinics.find(c => c.clinic === clinicName)
+    const payload = {
+      clinic: clinicName,
+      doctor: docName,
+      address: existingClinic?.address || '',
+      phone: existingClinic?.phone || '',
+      email: existingClinic?.email || ''
+    }
+
+    const { data, error } = await supabase.from('clinics').insert(payload).select().single()
     if (!error && data) {
       setClinics([...clinics, data])
       setDoctorName(data.doctor)
@@ -238,9 +342,9 @@ export default function DailyRecordPage() {
     <div className="flex flex-col min-h-full pb-12 w-full mx-[-2rem] px-[2rem] mt-[-2rem] pt-[2rem]">
       
       {/* Top Header - Bleeds to edges */}
-      <div className="bg-[#1a3324] text-white px-8 py-6 mb-6 mx-[-2rem] mt-[-2rem]">
+      <div className="bg-red-950 text-white px-8 py-6 mb-6 mx-[-2rem] mt-[-2rem]">
         <h1 className="text-3xl font-serif tracking-tight">Daily Record</h1>
-        <p className="text-[#a3d9b8] font-mono text-sm mt-1">{todayFormatted}</p>
+        <p className="text-red-200 font-mono text-sm mt-1">{todayFormatted}</p>
       </div>
 
       <div className="w-full">
@@ -248,7 +352,7 @@ export default function DailyRecordPage() {
         <div className="bg-white rounded-t-2xl border border-border overflow-hidden">
           
           {/* Table Header Controls */}
-          <div className="bg-[#f0fdf4] border-b border-[#bbf7d0] px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="bg-red-50 border-b border-red-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
             <span className="text-xs font-mono tracking-widest uppercase font-bold text-[#1a2035]">
               Monthly Records
             </span>
@@ -268,7 +372,7 @@ export default function DailyRecordPage() {
               </div>
 
               {/* Add Record Button */}
-              <button onClick={openModal} className="bg-primary text-white px-4 py-2 rounded-lg font-semibold shadow-sm hover:bg-[#15803d] flex items-center gap-2 transition-all text-sm">
+              <button onClick={openNewModal} className="bg-primary text-white px-4 py-2 rounded-lg font-semibold shadow-sm hover:bg-red-700 flex items-center gap-2 transition-all text-sm">
                 <Plus size={16} /> Add Record
               </button>
             </div>
@@ -276,7 +380,7 @@ export default function DailyRecordPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-[11px] text-white font-mono tracking-widest uppercase bg-[#1a3324] border-b border-[#14532d]">
+              <thead className="text-[11px] text-white font-mono tracking-widest uppercase bg-red-950 border-b border-red-900">
                 <tr>
                   <th className="px-4 py-4 font-bold w-12 text-center">No</th>
                   <th className="px-4 py-4 font-bold w-24">Date</th>
@@ -288,11 +392,18 @@ export default function DailyRecordPage() {
                   <th className="px-4 py-4 font-bold w-32">Teeth No.</th>
                   <th className="px-4 py-4 font-bold w-16 text-center">Qty</th>
                   <th className="px-4 py-4 font-bold">Remark</th>
+                  <th className="px-4 py-4 font-bold w-20 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {entries.map((entry, idx) => (
-                  <tr key={entry.id} className={`hover:bg-[#dcfce7] transition-colors ${entry.is_anomaly ? 'bg-amber-50' : ''}`}>
+                  <motion.tr 
+                  key={entry.id} 
+                  initial={{ opacity: 0, y: 10 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  transition={{ duration: 0.2, delay: Math.min(idx * 0.03, 0.5) }}
+                  className={`hover:bg-red-50 transition-colors ${entry.is_anomaly ? 'bg-amber-50' : ''}`}
+                >
                     <td className="px-4 py-3 text-center text-muted-foreground text-xs font-mono">{entries.length - idx}</td>
                     <td className="px-4 py-3 font-mono text-xs">{entry.date.split('-').slice(1).join('/') + '/' + entry.date.split('-')[0]}</td>
                     <td className="px-4 py-3 font-medium text-foreground">{entry.clinicName}</td>
@@ -307,16 +418,26 @@ export default function DailyRecordPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-foreground">{entry.shade || '-'}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-primary">{entry.teethNo || '-'}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-primary">{Array.isArray(entry.teethNo) ? entry.teethNo.join(' ') : (entry.teethNo || '-')}</td>
                     <td className="px-4 py-3 text-center font-semibold text-foreground">{entry.quantity}</td>
                     <td className="px-4 py-3 text-xs text-foreground truncate max-w-[200px]">{entry.remark || '-'}</td>
-                  </tr>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => handleEditEntry(entry)} className="p-1.5 text-blue-500 hover:bg-blue-50 hover:shadow-sm rounded-md transition-all" title="Edit">
+                          <Edit size={16} />
+                        </button>
+                        <button onClick={() => handleDeleteEntry(entry.id)} className="p-1.5 text-red-500 hover:bg-red-50 hover:shadow-sm rounded-md transition-all" title="Delete">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </motion.tr>
                 ))}
                 {entries.length === 0 && !loading && (
-                  <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground text-sm font-mono">No records found for {monthFormatted}.</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground text-sm font-mono">No records found for {monthFormatted}.</td></tr>
                 )}
                 {loading && (
-                  <tr><td colSpan={10} className="px-4 py-12 text-center text-muted-foreground text-sm font-mono">Loading data...</td></tr>
+                  <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground text-sm font-mono">Loading data...</td></tr>
                 )}
               </tbody>
             </table>
@@ -329,8 +450,8 @@ export default function DailyRecordPage() {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
             {/* Header */}
-            <div className="bg-[#1a3324] text-[#a3d9b8] px-6 py-4 font-mono text-xs tracking-[0.1em] uppercase flex justify-between items-center sticky top-0 z-10">
-              <span>New Entry</span>
+            <div className="bg-red-950 text-red-200 px-6 py-4 font-mono text-xs tracking-[0.1em] uppercase flex justify-between items-center sticky top-0 z-10">
+              <span>{editingEntryId ? 'Edit Entry' : 'New Entry'}</span>
               <button onClick={closeModal} className="text-white hover:text-primary-foreground transition-colors p-1"><X size={18}/></button>
             </div>
 
@@ -346,10 +467,10 @@ export default function DailyRecordPage() {
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">Category <span className="text-red-500">*</span></label>
                   <div className="flex gap-2">
-                    <button onClick={() => setGlobalCategory('fixed')} className={`flex-1 py-2 rounded-xl text-sm transition-all ${globalCategory === 'fixed' ? 'bg-[#e8f5ee] border-2 border-primary text-primary font-bold' : 'bg-[#f8f9fb] border-2 border-border text-muted-foreground'}`}>
+                    <button onClick={() => setGlobalCategory('fixed')} className={`flex-1 py-2 rounded-xl text-sm transition-all ${globalCategory === 'fixed' ? 'bg-red-50 border-2 border-primary text-primary font-bold' : 'bg-[#f8f9fb] border-2 border-border text-muted-foreground'}`}>
                       🔩 Fixed
                     </button>
-                    <button onClick={() => setGlobalCategory('removable')} className={`flex-1 py-2 rounded-xl text-sm transition-all ${globalCategory === 'removable' ? 'bg-[#e8f5ee] border-2 border-primary text-primary font-bold' : 'bg-[#f8f9fb] border-2 border-border text-muted-foreground'}`}>
+                    <button onClick={() => setGlobalCategory('removable')} className={`flex-1 py-2 rounded-xl text-sm transition-all ${globalCategory === 'removable' ? 'bg-red-50 border-2 border-primary text-primary font-bold' : 'bg-[#f8f9fb] border-2 border-border text-muted-foreground'}`}>
                       🦷 Removable
                     </button>
                   </div>
@@ -402,16 +523,18 @@ export default function DailyRecordPage() {
               <div className="space-y-3 pt-2">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-mono tracking-wider text-muted-foreground uppercase">Case Type & Patient Name</span>
-                  <button onClick={addEmptyRow} className="bg-primary text-white rounded-md px-2 py-0.5 text-sm font-bold shadow-sm">+</button>
+                  {!editingEntryId && <button onClick={addEmptyRow} className="bg-primary text-white rounded-md px-2 py-0.5 text-sm font-bold shadow-sm">+</button>}
                 </div>
 
                 {rows.map((row, idx) => {
                   const caseTypes = priceList.filter(p => p.category === globalCategory).map(p => p.item)
                   const group = getCaseGroup(row.caseType)
+                  const standardPrice = priceList.find(p => p.item === row.caseType)?.price
+                  const isAnomaly = standardPrice !== undefined && row.unitPrice !== standardPrice
 
                   return (
                     <div key={row.id} className="border-2 border-primary rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-[#e8f5ee] px-4 py-1.5 flex justify-between items-center border-b border-[#bbddd0]">
+                      <div className="bg-red-50 px-4 py-1.5 flex justify-between items-center border-b border-red-200">
                         <span className="text-primary text-[11px] font-mono tracking-widest font-bold">CASE {idx + 1}</span>
                         <button onClick={() => deleteRow(row.id)} className="text-red-400 hover:text-red-600 border border-red-400 rounded-md px-2 py-0.5 text-xs font-bold bg-white leading-none">−</button>
                       </div>
@@ -446,8 +569,8 @@ export default function DailyRecordPage() {
                             )}
                             {globalCategory === 'removable' && (
                               <div className="flex gap-2 mb-3">
-                                <button onClick={() => handleUpperLowerToggle(row.id, row, 'Upper')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${row.teethNo.includes('Upper') ? 'bg-[#e8f5ee] border-2 border-primary text-primary' : 'bg-white border-2 border-border text-muted-foreground'}`}>Upper</button>
-                                <button onClick={() => handleUpperLowerToggle(row.id, row, 'Lower')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${row.teethNo.includes('Lower') ? 'bg-[#e8f5ee] border-2 border-primary text-primary' : 'bg-white border-2 border-border text-muted-foreground'}`}>Lower</button>
+                                <button onClick={() => handleUpperLowerToggle(row.id, row, 'Upper')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${row.teethNo.includes('Upper') ? 'bg-red-50 border-2 border-primary text-primary' : 'bg-white border-2 border-border text-muted-foreground'}`}>Upper</button>
+                                <button onClick={() => handleUpperLowerToggle(row.id, row, 'Lower')} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${row.teethNo.includes('Lower') ? 'bg-red-50 border-2 border-primary text-primary' : 'bg-white border-2 border-border text-muted-foreground'}`}>Lower</button>
                               </div>
                             )}
                             
@@ -462,9 +585,21 @@ export default function DailyRecordPage() {
                               </div>
                               <div className="flex items-center gap-2 flex-[1.5] min-w-[140px]">
                                 <span className="text-xs text-muted-foreground">Unit Price:</span>
-                                <input type="number" value={row.unitPrice} onChange={e => updateRow(row.id, 'unitPrice', Number(e.target.value))} className="w-full p-2 bg-white border border-border rounded-lg text-sm outline-none focus:border-primary text-right font-bold text-primary" />
+                                <div className="flex-1 p-2 bg-white border border-border rounded-lg focus-within:border-primary">
+                                  <input type="number" value={row.unitPrice} onChange={e => updateRow(row.id, 'unitPrice', Number(e.target.value))} className="w-full text-sm outline-none text-right font-bold text-primary" />
+                                </div>
                               </div>
                             </div>
+                            
+                            {/* Anomaly Warning */}
+                            {isAnomaly && (
+                              <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-start gap-2">
+                                <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                                <div className="text-xs text-amber-700">
+                                  <strong>Cảnh báo:</strong> Giá tiền không khớp với bảng giá chuẩn (giá chuẩn: {new Intl.NumberFormat('vi-VN').format(standardPrice || 0)}). Đơn hàng sẽ được gắn cờ Anomaly.
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -480,7 +615,28 @@ export default function DailyRecordPage() {
             {/* Footer */}
             <div className="p-4 bg-secondary/30 border-t border-border flex gap-3 sticky bottom-0 z-10 rounded-b-2xl">
               <button onClick={closeModal} className="flex-1 py-3 bg-[#f0f2f5] border border-border rounded-xl text-muted-foreground font-semibold hover:bg-[#e2e8f0] transition-colors">Cancel</button>
-              <button onClick={handleSubmit} className="flex-[2] py-3 bg-primary border border-[#15803d] rounded-xl text-white font-bold hover:bg-primary/90 shadow-md transition-all">+ Add to Record</button>
+              <button onClick={handleSubmit} className="flex-[2] py-3 bg-primary border border-red-700 rounded-xl text-white font-bold hover:bg-primary/90 shadow-md transition-all">
+                {editingEntryId ? 'Update Record' : '+ Add to Record'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {entryToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-foreground">Xác nhận xóa</h3>
+              <p className="text-muted-foreground text-sm">Bạn có chắc chắn muốn xóa record này không? Hành động này không thể hoàn tác.</p>
+            </div>
+            <div className="p-4 bg-secondary/30 border-t border-border flex gap-3">
+              <button onClick={() => setEntryToDelete(null)} className="flex-1 py-2.5 bg-white border border-border rounded-xl text-muted-foreground font-semibold hover:bg-[#f0f2f5] transition-colors">Hủy</button>
+              <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-500 border border-red-600 rounded-xl text-white font-bold hover:bg-red-600 shadow-sm transition-all">Xóa record</button>
             </div>
           </div>
         </div>
