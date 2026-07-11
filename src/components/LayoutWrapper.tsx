@@ -40,7 +40,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
 
   return (
-    <div className="flex h-screen print:h-auto bg-secondary/30 print:bg-white">
+    <div className="flex print:block h-screen print:h-auto bg-secondary/30 print:bg-white">
       <aside className="hidden md:flex print:hidden w-64 flex-col bg-white border-r shadow-sm z-10">
         <div className="p-6">
           <Link href="/"><h1 className="text-2xl font-bold text-primary tracking-tight">LaboLab</h1></Link>
@@ -64,7 +64,7 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible relative">
+      <div className="flex-1 flex flex-col print:block min-w-0 overflow-hidden print:overflow-visible relative">
         <header className="flex md:hidden print:hidden items-center justify-between p-4 bg-white border-b shadow-sm z-10">
            <div className="flex items-center gap-3">
              <button onClick={() => setIsMobileMenuOpen(true)} className="text-muted-foreground hover:bg-secondary p-2 rounded-md transition-colors">

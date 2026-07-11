@@ -148,9 +148,9 @@ export default function VoucherPage() {
         </div>
       </div>
 
-      <div className="print:hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 print:block gap-6">
         {/* Voucher List */}
-        <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-border overflow-hidden h-[calc(100vh-200px)] flex flex-col">
+        <div className="lg:col-span-1 print:hidden bg-white rounded-2xl shadow-sm border border-border overflow-hidden h-[calc(100vh-200px)] flex flex-col">
           <div className="p-4 border-b border-border bg-secondary/30 flex justify-between items-center">
             <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Vouchers ({vouchers.length})</h2>
           </div>
@@ -216,7 +216,7 @@ export default function VoucherPage() {
         </div>
 
         {/* Voucher Preview */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-border overflow-hidden h-[calc(100vh-200px)] flex flex-col relative">
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-border overflow-hidden print:overflow-visible h-[calc(100vh-200px)] print:h-auto flex flex-col print:block relative print:border-none print:shadow-none">
           {!selectedVoucher ? (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-secondary/5">
                <Printer size={48} className="mb-4 opacity-20" />
