@@ -339,10 +339,10 @@ export default function DailyRecordPage() {
   const availableDoctors = Array.from(new Set(clinics.filter(c => c.clinic === clinicName && c.doctor).map(c => c.doctor)))
 
   return (
-    <div className="flex flex-col min-h-full pb-12 w-full mx-[-2rem] px-[2rem] mt-[-2rem] pt-[2rem]">
+    <div className="flex flex-col min-h-full pb-12 w-full">
       
       {/* Top Header - Bleeds to edges */}
-      <div className="bg-red-950 text-white px-8 py-6 mb-6 mx-[-2rem] mt-[-2rem]">
+      <div className="bg-red-950 text-white px-6 md:px-8 py-6 mb-6 -mx-4 md:-mx-8 -mt-4 md:-mt-8">
         <h1 className="text-3xl font-serif tracking-tight">Daily Record</h1>
         <p className="text-red-200 font-mono text-sm mt-1">{todayFormatted}</p>
       </div>
